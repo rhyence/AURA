@@ -4,9 +4,10 @@ import { fireNotification } from "../services/notifications"
 
 export default function useNotificationPoller(userId) {
   useEffect(() => {
-    if (!userId || Notification.permission !== "granted") return
+    if (!userId) return
 
     const poll = async () => {
+      if (Notification.permission !== "granted") return
       const { data, error } = await supabase
         .from("notifications_queue")
         .select("*")
@@ -14,7 +15,9 @@ export default function useNotificationPoller(userId) {
         .or(`target.eq.all,target.eq.${userId}`)
         .order("created_at", { ascending: true })
 
-      if (error || !data?.length) return
+      if (error) { console.warn("[Notif] poll error:", error.message); return }
+      if (!data?.length) return
+
       for (const n of data) {
         fireNotification(n.title, n.body)
         await supabase.from("notifications_queue").update({ sent: true }).eq("id", n.id)

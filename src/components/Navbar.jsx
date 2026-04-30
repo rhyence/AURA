@@ -23,7 +23,7 @@ export default function Navbar() {
     { to: "/child",     label: "Children"  },
     { to: "/tips",      label: "Tips"      },
     ...(!isPremium    ? [{ to: "/premium",   label: "Premium"   }] : []),
-    ...(isAdmin       ? [{ to: "/dashboard", label: "Dashboard", dot: true }] : []),
+    ...(isAdmin       ? [{ to: "/dashboard", label: "Dashboard",  }] : []),
   ]
 
   const linkClass = ({ isActive }) =>
@@ -37,9 +37,9 @@ export default function Navbar() {
         </motion.span>
 
         <div className="hidden md:flex gap-7 items-center">
-          {links.map(({ to, label, dot }) => (
+          {links.map(({ to, label }) => (
             <NavLink key={to} to={to} end={to==="/"} className={linkClass}>
-              {label}{dot && <span style={{ marginLeft:5, fontSize:8, color:"#ff3c3c" }}>●</span>}
+              {label}
             </NavLink>
           ))}
           <NavLink to="/profile">
