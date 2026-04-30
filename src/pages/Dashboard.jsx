@@ -1,0 +1,368 @@
+import { useState, useEffect, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
+import { motion, AnimatePresence } from "framer-motion"
+import AnimatedPage from "../components/AnimatedPage"
+import { supabase } from "../services/supabaseclient"
+import { buttonVariants, scrollReveal, staggerContainer, cardVariants } from "../animations/variants"
+
+const ADMIN_EMAILS = ["andalrhyence@gmail.com"] // ← replace with your email(s)
+
+const card = {
+  background: "rgba(22,22,22,0.85)",
+  border: "1px solid rgba(255,255,255,0.07)",
+  backdropFilter: "blur(20px)",
+  borderRadius: 16,
+}
+
+const inp = {
+  width: "100%", padding: "10px 14px",
+  background: "rgba(28,28,28,0.9)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 10, color: "#e8e8e8", fontSize: 13,
+  outline: "none", fontFamily: "Inter, sans-serif",
+  boxSizing: "border-box",
+}
+
+const PLANS = ["free", "premium"]
+
+export default function Dashboard() {
+  const navigate = useNavigate()
+  const [currentUser,   setCurrentUser]   = useState(null)
+  const [authorized,    setAuthorized]    = useState(null) // null=loading
+  const [users,         setUsers]         = useState([])
+  const [loadingUsers,  setLoadingUsers]  = useState(true)
+  const [savingId,      setSavingId]      = useState(null)
+  const [toast,         setToast]         = useState(null)
+
+  // Notification state
+  const [notifTitle,    setNotifTitle]    = useState("")
+  const [notifBody,     setNotifBody]     = useState("")
+  const [notifTarget,   setNotifTarget]   = useState("all") // "all" | user_id
+  const [sendingNotif,  setSendingNotif]  = useState(false)
+
+  // Add admin state
+  const [newAdminEmail, setNewAdminEmail] = useState("")
+  const [addingAdmin,   setAddingAdmin]   = useState(false)
+
+  const showToast = (msg, ok = true) => {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  // ── Auth check ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    async function check() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { navigate("/login"); return }
+      setCurrentUser(user)
+
+      // Check admin table
+      const { data } = await supabase
+        .from("admins")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle()
+
+      if (data) {
+        setAuthorized(true)
+      } else {
+        // Fallback: allow hardcoded emails during initial setup
+        setAuthorized(ADMIN_EMAILS.includes(user.email))
+      }
+    }
+    check()
+  }, [navigate])
+
+  // ── Load users ───────────────────────────────────────────────────────────────
+  const loadUsers = useCallback(async () => {
+    setLoadingUsers(true)
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, display_name, email, plan")
+      .order("email", { ascending: true })
+    if (!error) setUsers(data || [])
+    setLoadingUsers(false)
+  }, [])
+
+  useEffect(() => {
+    if (authorized) loadUsers()
+  }, [authorized, loadUsers])
+
+  // ── Change plan ──────────────────────────────────────────────────────────────
+  const handlePlanChange = async (userId, newPlan) => {
+    setSavingId(userId)
+    const { error } = await supabase
+      .from("profiles")
+      .update({ plan: newPlan })
+      .eq("id", userId)
+    setSavingId(null)
+    if (error) showToast("Failed to update plan.", false)
+    else {
+      showToast(`Plan updated to ${newPlan}.`)
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan: newPlan } : u))
+    }
+  }
+
+  // ── Send notification ────────────────────────────────────────────────────────
+  const handleSendNotification = async () => {
+    if (!notifTitle.trim() || !notifBody.trim()) {
+      showToast("Fill in both title and message.", false); return
+    }
+    setSendingNotif(true)
+    const payload = {
+      title: notifTitle.trim(),
+      body:  notifBody.trim(),
+      target: notifTarget, // "all" or a user_id
+    }
+    const { error } = await supabase.from("notifications_queue").insert([payload])
+    setSendingNotif(false)
+    if (error) showToast("Failed to queue notification: " + error.message, false)
+    else {
+      showToast("Notification queued ✓")
+      setNotifTitle(""); setNotifBody(""); setNotifTarget("all")
+    }
+  }
+
+  // ── Add admin ────────────────────────────────────────────────────────────────
+  const handleAddAdmin = async () => {
+    if (!newAdminEmail.trim()) return
+    setAddingAdmin(true)
+    // Look up user by email in profiles
+    const { data: profile, error: pErr } = await supabase
+      .from("profiles")
+      .select("id, email")
+      .eq("email", newAdminEmail.trim())
+      .maybeSingle()
+
+    if (pErr || !profile) {
+      showToast("User not found. They must sign up first.", false)
+      setAddingAdmin(false); return
+    }
+    const { error } = await supabase.from("admins").insert([{ user_id: profile.id }])
+    setAddingAdmin(false)
+    if (error) showToast("Failed to add admin: " + error.message, false)
+    else { showToast(`${newAdminEmail} is now an admin.`); setNewAdminEmail("") }
+  }
+
+  // ── Render states ────────────────────────────────────────────────────────────
+  if (authorized === null) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: 36, height: 36, border: "2px solid #ff3c3c", borderTopColor: "transparent", borderRadius: "50%" }} className="animate-spin" />
+    </div>
+  )
+
+  if (authorized === false) return (
+    <AnimatedPage>
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: 24 }}>
+        <span style={{ fontSize: 48 }}>🚫</span>
+        <h2 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 24, color: "#fff" }}>Access Denied</h2>
+        <p style={{ color: "#555", fontSize: 13, fontFamily: "DM Mono, monospace" }}>You don't have dashboard access.</p>
+        <motion.button variants={buttonVariants} initial="rest" whileHover="hover" whileTap="tap"
+          onClick={() => navigate("/")}
+          style={{ padding: "10px 24px", background: "#ff3c3c", color: "#fff", borderRadius: 10, fontSize: 12, fontWeight: 600, fontFamily: "DM Mono, monospace" }}
+        >GO HOME</motion.button>
+      </div>
+    </AnimatedPage>
+  )
+
+  return (
+    <AnimatedPage>
+      <div style={{ minHeight: "100vh", padding: "32px 16px 80px" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+
+          {/* Header */}
+          <motion.div variants={scrollReveal} initial="initial" whileInView="whileInView" viewport={{ once: true }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+              <h1 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 32, color: "#fff", letterSpacing: "-0.02em" }}>
+                Dashboard<span style={{ color: "#ff3c3c" }}>.</span>
+              </h1>
+              <span style={{ padding: "3px 10px", borderRadius: 99, fontSize: 10, fontWeight: 600, fontFamily: "DM Mono, monospace", letterSpacing: "0.08em", background: "rgba(255,60,60,0.12)", color: "#ff3c3c" }}>
+                ADMIN
+              </span>
+            </div>
+            <p style={{ color: "#555", fontSize: 13, fontFamily: "DM Mono, monospace" }}>
+              {currentUser?.email}
+            </p>
+          </motion.div>
+
+          {/* ── Users table ── */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+            style={{ ...card, borderTop: "2px solid #ff3c3c", overflow: "hidden" }}>
+
+            <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <h2 style={{ fontSize: 11, color: "#aaa", fontFamily: "DM Mono, monospace", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                  Users ({users.length})
+                </h2>
+                <motion.button variants={buttonVariants} initial="rest" whileHover="hover" whileTap="tap"
+                  onClick={loadUsers}
+                  style={{ fontSize: 11, color: "#555", fontFamily: "DM Mono, monospace", background: "none", cursor: "pointer" }}
+                >↺ refresh</motion.button>
+              </div>
+            </div>
+
+            {loadingUsers ? (
+              <div style={{ padding: 32, display: "flex", justifyContent: "center" }}>
+                <div style={{ width: 28, height: 28, border: "2px solid #ff3c3c", borderTopColor: "transparent", borderRadius: "50%" }} className="animate-spin" />
+              </div>
+            ) : users.length === 0 ? (
+              <p style={{ padding: 24, color: "#444", fontSize: 13, fontFamily: "DM Mono, monospace", textAlign: "center" }}>No users found.</p>
+            ) : (
+              <motion.div variants={staggerContainer} initial="initial" animate="animate">
+                {users.map((u, i) => (
+                  <motion.div key={u.id} variants={cardVariants}
+                    style={{
+                      display: "grid", gridTemplateColumns: "1fr auto",
+                      alignItems: "center", gap: 16,
+                      padding: "14px 20px",
+                      borderBottom: i < users.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      {/* Display name */}
+                      <p style={{ fontSize: 13, color: "#e8e8e8", fontWeight: 600, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {u.display_name || <span style={{ color: "#444", fontStyle: "italic" }}>no display name</span>}
+                      </p>
+                      {/* Email */}
+                      <p style={{ fontSize: 11, color: "#555", fontFamily: "DM Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {u.email || u.id}
+                      </p>
+                    </div>
+
+                    {/* Plan selector */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      {savingId === u.id ? (
+                        <div style={{ width: 16, height: 16, border: "2px solid #ff3c3c", borderTopColor: "transparent", borderRadius: "50%" }} className="animate-spin" />
+                      ) : (
+                        <select
+                          value={u.plan || "free"}
+                          onChange={e => handlePlanChange(u.id, e.target.value)}
+                          style={{
+                            padding: "6px 10px",
+                            background: "rgba(28,28,28,0.9)",
+                            border: `1px solid ${u.plan === "premium" ? "rgba(255,60,60,0.3)" : "rgba(255,255,255,0.08)"}`,
+                            borderRadius: 8, color: u.plan === "premium" ? "#ff3c3c" : "#666",
+                            fontSize: 11, fontWeight: 600, fontFamily: "DM Mono, monospace",
+                            letterSpacing: "0.06em", cursor: "pointer", outline: "none",
+                          }}
+                        >
+                          {PLANS.map(p => (
+                            <option key={p} value={p} style={{ background: "#1a1a1a" }}>
+                              {p.toUpperCase()}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </motion.div>
+
+          {/* ── Send Notification ── */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+            style={{ ...card, borderTop: "2px solid #ffe66d", padding: 24 }}>
+
+            <h2 style={{ fontSize: 11, color: "#aaa", fontFamily: "DM Mono, monospace", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 20 }}>
+              🔔 Send Notification
+            </h2>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <p style={{ fontSize: 10, color: "#444", fontFamily: "DM Mono, monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Target</p>
+                <select
+                  value={notifTarget}
+                  onChange={e => setNotifTarget(e.target.value)}
+                  style={{ ...inp }}
+                >
+                  <option value="all">All users</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.display_name || u.email || u.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <p style={{ fontSize: 10, color: "#444", fontFamily: "DM Mono, monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Title</p>
+                <input
+                  type="text" value={notifTitle} onChange={e => setNotifTitle(e.target.value)}
+                  placeholder="e.g. AQI Alert"
+                  style={inp}
+                />
+              </div>
+              <div>
+                <p style={{ fontSize: 10, color: "#444", fontFamily: "DM Mono, monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Message</p>
+                <textarea
+                  value={notifBody} onChange={e => setNotifBody(e.target.value)}
+                  placeholder="e.g. Air quality in your area has reached Unhealthy levels."
+                  rows={3}
+                  style={{ ...inp, resize: "vertical", lineHeight: 1.6 }}
+                />
+              </div>
+              <motion.button variants={buttonVariants} initial="rest" whileHover="hover" whileTap="tap"
+                onClick={handleSendNotification} disabled={sendingNotif}
+                style={{
+                  padding: "12px 0", background: "#ffe66d", color: "#111",
+                  borderRadius: 10, fontSize: 12, fontWeight: 700,
+                  fontFamily: "DM Mono, monospace", letterSpacing: "0.1em",
+                  opacity: sendingNotif ? 0.5 : 1, cursor: sendingNotif ? "not-allowed" : "pointer",
+                }}
+              >{sendingNotif ? "SENDING…" : "SEND NOTIFICATION"}</motion.button>
+            </div>
+          </motion.div>
+
+          {/* ── Add Admin ── */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+            style={{ ...card, borderTop: "2px solid #4ecdc4", padding: 24 }}>
+
+            <h2 style={{ fontSize: 11, color: "#aaa", fontFamily: "DM Mono, monospace", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 20 }}>
+              🛡️ Add Dashboard Access
+            </h2>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)}
+                placeholder="user@example.com"
+                style={{ ...inp, flex: 1 }}
+              />
+              <motion.button variants={buttonVariants} initial="rest" whileHover="hover" whileTap="tap"
+                onClick={handleAddAdmin} disabled={addingAdmin}
+                style={{
+                  padding: "10px 18px", background: "#4ecdc4", color: "#111",
+                  borderRadius: 10, fontSize: 11, fontWeight: 700,
+                  fontFamily: "DM Mono, monospace", letterSpacing: "0.08em",
+                  flexShrink: 0, opacity: addingAdmin ? 0.5 : 1,
+                  cursor: addingAdmin ? "not-allowed" : "pointer",
+                }}
+              >{addingAdmin ? "…" : "ADD"}</motion.button>
+            </div>
+            <p style={{ marginTop: 10, fontSize: 11, color: "#333", fontFamily: "DM Mono, monospace" }}>
+              The user must already have an account. Access takes effect on their next sign-in.
+            </p>
+          </motion.div>
+
+        </div>
+      </div>
+
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}
+            style={{
+              position: "fixed", bottom: 88, left: "50%", transform: "translateX(-50%)",
+              padding: "12px 20px", borderRadius: 10, zIndex: 100,
+              background: toast.ok ? "rgba(78,205,196,0.12)" : "rgba(255,60,60,0.12)",
+              border: `1px solid ${toast.ok ? "rgba(78,205,196,0.3)" : "rgba(255,60,60,0.3)"}`,
+              color: toast.ok ? "#4ecdc4" : "#ff3c3c",
+              fontSize: 12, fontFamily: "DM Mono, monospace",
+              whiteSpace: "nowrap",
+            }}
+          >{toast.msg}</motion.div>
+        )}
+      </AnimatePresence>
+    </AnimatedPage>
+  )
+}

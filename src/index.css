@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    background-color: #111111;
+    color: #e8e8e8;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar        { width: 5px; }
+  ::-webkit-scrollbar-track  { background: #111; }
+  ::-webkit-scrollbar-thumb  { background: #ff3c3c55; border-radius: 99px; }
+}
+
+@layer components {
+  /* anime.js style card */
+  .aura-card {
+    background: rgba(22, 22, 22, 0.85);
+    border: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(20px);
+    border-radius: 16px;
+  }
+
+  /* colored top-border accent like anime.js sections */
+  .aura-card-accent {
+    background: rgba(22, 22, 22, 0.85);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-top: 2px solid #ff3c3c;
+    backdrop-filter: blur(20px);
+    border-radius: 16px;
+  }
+
+  /* Noise overlay */
+  .noise::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.025;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* gradient text */
+  .gradient-text {
+    background: linear-gradient(90deg, #ff3c3c, #ff8c42, #ffe66d);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* mono label */
+  .mono {
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* display heading */
+  .display {
+    font-family: 'Syne', sans-serif;
+  }
+}
