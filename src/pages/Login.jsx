@@ -45,15 +45,17 @@ export default function Login() {
   }
 
   const handleGoogle = async () => {
-    setLoading(true); setError(null)
-    const { error: err } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/`,
-        queryParams: { access_type: "offline", prompt: "consent" },
-      },
-    })
-    if (err) { setError(err.message); setLoading(false) }
+  setLoading(true); setError(null)
+  const { data, error: err } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${window.location.origin}/`,
+      queryParams: { access_type: "offline", prompt: "consent" },
+      skipBrowserRedirect: true,   // ← get the URL back manually
+    },
+  })
+  if (err) { setError(err.message); setLoading(false); return }
+  window.location.href = data.url  // ← force full page navigation
   }
 
   const handleForgotPassword = async () => {
