@@ -86,9 +86,9 @@ export default function Home() {
     // Animate from 20 to 85 while fetch is in progress
     let fake = 20
     const ticker = setInterval(() => {
-      fake = Math.min(85, fake + Math.random() * 6)
+      fake = Math.min(85, fake + Math.random() * 15)
       setLoadProgress(Math.floor(fake))
-    }, 300)
+    }, 150)
     const result = await fetchAirQuality(loc.lat, loc.lng)
     clearInterval(ticker)
     if (!result) { setLoadProgress(0); setError("Could not load air quality data."); setLoading(false); return }
