@@ -39,18 +39,7 @@ const card = {
 }
 
 
-function HomeLoader() {
-  const [progress, setProgress] = React.useState(0)
-  React.useEffect(() => {
-    const start = Date.now()
-    const duration = 2200
-    const frame = () => {
-      const p = Math.min(99, Math.floor(((Date.now() - start) / duration) * 100))
-      setProgress(p)
-      if (p < 99) requestAnimationFrame(frame)
-    }
-    requestAnimationFrame(frame)
-  }, [])
+function HomeLoader({ progress }) {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column",
                   alignItems: "center", justifyContent: "center",
@@ -71,7 +60,7 @@ function HomeLoader() {
         <div style={{ width: "100%", height: 2, background: "rgba(255,255,255,0.06)", borderRadius: 99 }}>
           <div style={{ height: "100%", borderRadius: 99,
                         background: "linear-gradient(90deg, #ff3c3c, #ff8c42)",
-                        width: `${progress}%`, transition: "width 0.05s linear" }} />
+                        width: `${progress}%`, transition: "width 0.3s ease" }} />
         </div>
       </div>
     </div>
@@ -89,13 +78,17 @@ export default function Home() {
   const [modalPollutant, setModal]       = useState(null)
   const [generalTip,     setGeneralTip]  = useState(null)
   const [lastUpdated,    setLastUpdated] = useState(null)
+  const [loadProgress,   setLoadProgress] = useState(0)
 
   const loadData = useCallback(async (loc) => {
     setLoading(true)
+    setLoadProgress(20)
     const result = await fetchAirQuality(loc.lat, loc.lng)
-    setLoading(false)
-    if (!result) setError("Could not load air quality data.")
-    else { setData(result); setLastUpdated(new Date()) }
+    setLoadProgress(90)
+    if (!result) { setError("Could not load air quality data."); setLoading(false); return }
+    setLoadProgress(100)
+    setTimeout(() => setLoading(false), 300)
+    setData(result); setLastUpdated(new Date())
   }, [])
 
   const loadTip = useCallback(async () => {
@@ -197,7 +190,7 @@ export default function Home() {
     </AnimatedPage>
   )
 
-  if (loading && !data) return <HomeLoader />
+  if (loading && !data) return <HomeLoader progress={loadProgress} />
 
   if (error && !data) return (
     <AnimatedPage>
