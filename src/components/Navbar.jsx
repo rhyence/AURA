@@ -45,7 +45,7 @@ export default function Navbar() {
           <NavLink to="/profile">
             {({ isActive }) => (
               <motion.div whileHover={{ scale:1.05 }} whileTap={{ scale:0.95 }}
-                style={{ width:30, height:30, borderRadius:"50%", border:isActive?"1px solid #ff3c3c":"1px solid rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:isActive?"#ff3c3c":"#888" }}>
+                style={{ width:52, height:52, borderRadius:"50%", border:isActive?"1px solid #ff3c3c":"1px solid rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:21, color:isActive?"#ff3c3c":"#888" }}>
                 👤
               </motion.div>
             )}
@@ -54,10 +54,10 @@ export default function Navbar() {
 
         <div className="md:hidden flex items-center gap-3">
           <NavLink to="/profile">
-            <motion.div whileTap={{ scale:0.9 }} style={{ width:30, height:30, borderRadius:"50%", border:"1px solid rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:"#888" }}>👤</motion.div>
+            <motion.div whileTap={{ scale:0.9 }} style={{ width:52, height:52, borderRadius:"50%", border:"1px solid rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:21, color:"#888" }}>👤</motion.div>
           </NavLink>
-          <motion.button whileTap={{ scale:0.92 }} onClick={() => setOpen(p => !p)} style={{ color:"#888", padding:"6px" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <motion.button whileTap={{ scale:0.92 }} onClick={() => setOpen(p => !p)} style={{ color:"#888", padding:"10px" }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               {open ? <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />}
             </svg>
           </motion.button>
