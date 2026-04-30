@@ -56,6 +56,7 @@ export default function Location() {
   const [pin,         setPin]         = useState(null)
   const [placeName,   setPlaceName]   = useState("")
   const [searching,   setSearching]   = useState(false)
+  const [mapStyle, setMapStyle] = useState("dark")
   const [locating,    setLocating]    = useState(false)
   const [error,       setError]       = useState(null)
   const [saved,       setSaved]       = useState(false)
@@ -197,14 +198,35 @@ export default function Location() {
           </p>
         )}
 
+        {/* Map style toggle */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 3, gap: 3 }}>
+            {[["dark", "🌑 Dark"], ["color", "🗺️ Color"]].map(([val, label]) => (
+              <button key={val} onClick={() => setMapStyle(val)}
+                style={{ padding: "6px 14px", borderRadius: 7, fontSize: 11, fontWeight: 600, fontFamily: "DM Mono, monospace", cursor: "pointer", transition: "all 0.2s",
+                  background: mapStyle === val ? "#ff3c3c" : "transparent",
+                  color: mapStyle === val ? "#fff" : "#555",
+                }}>{label}</button>
+            ))}
+          </div>
+        </div>
+
         {/* Map */}
         <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)", marginBottom: 8 }}>
-          <MapContainer center={[12.8797, 121.774]} zoom={6} style={{ height: 360, width: "100%" }}>
-            <TileLayer
-              attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-              subdomains="abcd" maxZoom={19}
-            />
+          <MapContainer key={mapStyle} center={[12.8797, 121.774]} zoom={6} style={{ height: 360, width: "100%" }}>
+            {mapStyle === "dark" ? (
+              <TileLayer
+                attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                subdomains="abcd" maxZoom={19}
+              />
+            ) : (
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                subdomains="abc" maxZoom={19}
+              />
+            )}
             {flyTo && <FlyTo target={flyTo} />}
             <ClickHandler onSelect={handleMapClick} />
             {pin && <Marker position={pin} />}
