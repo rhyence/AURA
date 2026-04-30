@@ -41,7 +41,7 @@ export default function Tips() {
     const load = async () => {
       setLoading(true)
       const { data: kids } = await supabase.from("children").select("*")
-      if (kids?.length) { setChildren(kids); setActiveTab(kids[0].condition) }
+      if (kids?.length) { setChildren(kids); setActiveTab(kids[0].id) }
       const { data: allTips } = await supabase.from("tips").select("*").order("aqi_level", { ascending: true })
       setTips(allTips || [])
       setLoading(false)
@@ -104,7 +104,9 @@ export default function Tips() {
   }
 
   // Premium view
-  const filteredTips = tips.filter(t => t.disease === activeTab)
+  const activeChild = children.find(c => c.id === activeTab)
+  const activeConditions = activeChild ? (activeChild.conditions || [activeChild.condition]) : []
+  const filteredTips = tips.filter(t => activeConditions.includes(t.disease))
 
   return (
     <AnimatedPage>
@@ -134,11 +136,12 @@ export default function Tips() {
           {children.length > 0 && (
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
               {children.map(child => {
-                const d = DISEASE_LABELS[child.condition]
-                const active = activeTab === child.condition
+                const childConditions = child.conditions || [child.condition]
+                const d = DISEASE_LABELS[childConditions[0]]
+                const active = activeTab === child.id
                 return (
                   <motion.button key={child.id} whileTap={{ scale: 0.96 }}
-                    onClick={() => setActiveTab(child.condition)}
+                    onClick={() => setActiveTab(child.id)}
                     style={{
                       display: "flex", alignItems: "center", gap: 8, padding: "8px 16px",
                       borderRadius: 10, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",

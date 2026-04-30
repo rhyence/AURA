@@ -28,13 +28,13 @@ const inp = {
 
 export default function Child() {
   const { isPremium } = useUser()
-  const [children,  setChildren]  = useState([])
-  const [showForm,  setShowForm]  = useState(false)
-  const [loading,   setLoading]   = useState(true)
-  const [saving,    setSaving]    = useState(false)
-  const [name,      setName]      = useState("")
-  const [age,       setAge]       = useState("")
-  const [condition, setCondition] = useState("asthma")
+  const [children,   setChildren]  = useState([])
+  const [showForm,   setShowForm]  = useState(false)
+  const [loading,    setLoading]   = useState(true)
+  const [saving,     setSaving]    = useState(false)
+  const [name,       setName]      = useState("")
+  const [age,        setAge]       = useState("")
+  const [conditions, setConditions] = useState(["asthma"])
 
   useEffect(() => {
     async function loadChildren() {
@@ -45,17 +45,26 @@ export default function Child() {
     loadChildren()
   }, [])
 
+  const toggleCondition = (val) => {
+    setConditions(prev =>
+      prev.includes(val)
+        ? prev.length === 1 ? prev  // must keep at least one
+        : prev.filter(c => c !== val)
+        : [...prev, val]
+    )
+  }
+
   const handleAdd = async () => {
     if (!name.trim() || !age) return
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
     const { data: newChild, error } = await supabase.from("children").insert([
-      { name: name.trim(), age: Number(age), condition, user_id: user.id }
+      { name: name.trim(), age: Number(age), condition: conditions[0], conditions, user_id: user.id }
     ]).select().single()
     setSaving(false)
     if (!error && newChild) {
       setChildren(prev => [...prev, newChild])
-      setName(""); setAge(""); setCondition("asthma"); setShowForm(false)
+      setName(""); setAge(""); setConditions(["asthma"]); setShowForm(false)
     }
   }
 
@@ -90,8 +99,7 @@ export default function Child() {
                   padding: "10px 18px", background: "#ff3c3c", color: "#fff",
                   borderRadius: 10, fontSize: 12, fontWeight: 600,
                   fontFamily: "DM Mono, monospace", letterSpacing: "0.08em",
-                }}
-              >＋ ADD CHILD</motion.button>
+                }}>＋ ADD CHILD</motion.button>
             )}
           </div>
 
@@ -108,8 +116,7 @@ export default function Child() {
                 onClick={() => setShowForm(true)}
                 style={{ padding: "10px 24px", background: "#ff3c3c", color: "#fff",
                          borderRadius: 10, fontSize: 12, fontWeight: 600,
-                         fontFamily: "DM Mono, monospace", letterSpacing: "0.08em" }}
-              >ADD FIRST CHILD</motion.button>
+                         fontFamily: "DM Mono, monospace", letterSpacing: "0.08em" }}>ADD FIRST CHILD</motion.button>
             </motion.div>
           )}
 
@@ -118,7 +125,8 @@ export default function Child() {
             <motion.div variants={staggerContainer} initial="initial" animate="animate"
               style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {children.map(child => {
-                const disease = DISEASES.find(d => d.value === child.condition)
+                const childConditions = child.conditions || [child.condition]
+                const diseases = childConditions.map(c => DISEASES.find(d => d.value === c)).filter(Boolean)
                 return (
                   <motion.div key={child.id} variants={cardVariants}
                     whileHover={{ y: -3 }}
@@ -128,15 +136,19 @@ export default function Child() {
                         width: 48, height: 48, borderRadius: 12,
                         background: "rgba(255,60,60,0.1)", border: "1px solid rgba(255,60,60,0.2)",
                         display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22,
-                      }}>{disease?.icon || "👦"}</div>
+                      }}>{diseases[0]?.icon || "👦"}</div>
                       <div>
                         <p style={{ color: "#e8e8e8", fontWeight: 600, fontSize: 14 }}>{child.name}</p>
                         <p style={{ color: "#555", fontSize: 12, fontFamily: "DM Mono, monospace", marginTop: 2 }}>Age {child.age}</p>
-                        <span style={{
-                          display: "inline-block", marginTop: 6, padding: "2px 8px",
-                          background: "rgba(78,205,196,0.1)", color: "#4ecdc4",
-                          borderRadius: 99, fontSize: 10, fontFamily: "DM Mono, monospace",
-                        }}>{disease?.label || child.condition}</span>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                          {diseases.map(d => (
+                            <span key={d.value} style={{
+                              display: "inline-block", padding: "2px 8px",
+                              background: "rgba(78,205,196,0.1)", color: "#4ecdc4",
+                              borderRadius: 99, fontSize: 10, fontFamily: "DM Mono, monospace",
+                            }}>{d.label}</span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                     <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
@@ -190,25 +202,38 @@ export default function Child() {
                 </div>
                 <div>
                   <label style={{ fontSize: 10, color: "#555", fontFamily: "DM Mono, monospace",
-                                   letterSpacing: "0.1em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>Condition</label>
+                                   letterSpacing: "0.1em", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
+                    Conditions <span style={{ color: "#444" }}>(select all that apply)</span>
+                  </label>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {DISEASES.map(d => (
-                      <motion.button key={d.value} whileTap={{ scale: 0.98 }}
-                        onClick={() => setCondition(d.value)}
-                        style={{
-                          display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px",
-                          borderRadius: 10, textAlign: "left",
-                          border: condition === d.value ? "1px solid #ff3c3c" : "1px solid rgba(255,255,255,0.06)",
-                          background: condition === d.value ? "rgba(255,60,60,0.08)" : "rgba(28,28,28,0.6)",
-                        }}
-                      >
-                        <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{d.icon}</span>
-                        <div>
-                          <p style={{ color: condition === d.value ? "#ff3c3c" : "#aaa", fontWeight: 600, fontSize: 13 }}>{d.label}</p>
-                          <p style={{ color: "#444", fontSize: 11, marginTop: 2 }}>{d.note}</p>
-                        </div>
-                      </motion.button>
-                    ))}
+                    {DISEASES.map(d => {
+                      const selected = conditions.includes(d.value)
+                      return (
+                        <motion.button key={d.value} whileTap={{ scale: 0.98 }}
+                          onClick={() => toggleCondition(d.value)}
+                          style={{
+                            display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px",
+                            borderRadius: 10, textAlign: "left",
+                            border: selected ? "1px solid #ff3c3c" : "1px solid rgba(255,255,255,0.06)",
+                            background: selected ? "rgba(255,60,60,0.08)" : "rgba(28,28,28,0.6)",
+                          }}
+                        >
+                          <span style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{d.icon}</span>
+                          <div style={{ flex: 1 }}>
+                            <p style={{ color: selected ? "#ff3c3c" : "#aaa", fontWeight: 600, fontSize: 13 }}>{d.label}</p>
+                            <p style={{ color: "#444", fontSize: 11, marginTop: 2 }}>{d.note}</p>
+                          </div>
+                          <div style={{
+                            width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 2,
+                            border: selected ? "2px solid #ff3c3c" : "2px solid #333",
+                            background: selected ? "#ff3c3c" : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}>
+                            {selected && <span style={{ color: "#fff", fontSize: 10 }}>✓</span>}
+                          </div>
+                        </motion.button>
+                      )
+                    })}
                   </div>
                 </div>
               </div>
