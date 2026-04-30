@@ -83,9 +83,15 @@ export default function Home() {
   const loadData = useCallback(async (loc) => {
     setLoading(true)
     setLoadProgress(20)
+    // Animate from 20 to 85 while fetch is in progress
+    let fake = 20
+    const ticker = setInterval(() => {
+      fake = Math.min(85, fake + Math.random() * 6)
+      setLoadProgress(Math.floor(fake))
+    }, 300)
     const result = await fetchAirQuality(loc.lat, loc.lng)
-    setLoadProgress(90)
-    if (!result) { setError("Could not load air quality data."); setLoading(false); return }
+    clearInterval(ticker)
+    if (!result) { setLoadProgress(0); setError("Could not load air quality data."); setLoading(false); return }
     setLoadProgress(100)
     setTimeout(() => setLoading(false), 300)
     setData(result); setLastUpdated(new Date())
