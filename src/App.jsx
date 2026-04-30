@@ -5,6 +5,7 @@ import { supabase } from "./services/supabaseclient"
 import { ThemeProvider } from "./context/ThemeContext"
 import { UserProvider, useUser } from "./context/UserContext"
 import useNotificationPoller from "./hooks/useNotificationPoller"
+import { requestPermission } from "./services/notifications"
 import Navbar               from "./components/Navbar"
 import AnimatedBackground   from "./components/AnimatedBackground"
 import DisplayNamePrompt    from "./components/DisplayNamePrompt"
@@ -45,6 +46,8 @@ function Inner({ session }) {
   const { showNamePrompt, userId, onNameSet } = useUser()
   const userEmail = session?.user?.email || ""
   useNotificationPoller(userId)
+
+  useEffect(() => { if (userId) requestPermission() }, [userId])
   return (
     <>
       <AnimatedBackground />
