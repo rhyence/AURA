@@ -18,7 +18,7 @@ import Login        from "./pages/Login"
 import Dashboard    from "./pages/Dashboard"
 
 function PrivateRoute({ session, children }) {
-  if (session === undefined) return null
+  if (session === undefined) return null  // still loading — render nothing
   return session ? children : <Navigate to="/login" replace />
 }
 
@@ -27,7 +27,7 @@ function AnimatedRoutes({ session }) {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        <Route path="/login"     element={session ? <Navigate to="/" replace /> : <Login />} />
+        <Route path="/login"     element={session === undefined ? null : session ? <Navigate to="/" replace /> : <Login />} />
         <Route path="/"          element={<PrivateRoute session={session}><Home /></PrivateRoute>} />
         <Route path="/location"  element={<PrivateRoute session={session}><Location /></PrivateRoute>} />
         <Route path="/child"     element={<PrivateRoute session={session}><Child /></PrivateRoute>} />
@@ -44,8 +44,7 @@ function AnimatedRoutes({ session }) {
 function Inner({ session }) {
   const { showNamePrompt, userId, onNameSet } = useUser()
   const userEmail = session?.user?.email || ""
-  useNotificationPoller(userId)   // polls every 15s when notifications granted
-
+  useNotificationPoller(userId)
   return (
     <>
       <AnimatedBackground />
@@ -62,11 +61,25 @@ function Inner({ session }) {
 
 export default function App() {
   const [session, setSession] = useState(undefined)
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s ?? null))
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s ?? null))
+    // Check for existing session first
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s ?? null)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      // SIGNED_IN covers both email/password and OAuth callback
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        setSession(s)
+      } else if (event === "SIGNED_OUT") {
+        setSession(null)
+      }
+      // Ignore INITIAL_SESSION — handled by getSession above
+    })
     return () => subscription.unsubscribe()
   }, [])
+
   return (
     <ThemeProvider>
       <UserProvider>
