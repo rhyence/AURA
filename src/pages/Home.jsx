@@ -8,6 +8,7 @@ import { fetchAirQuality } from "../services/airquality"
 import { supabase } from "../services/supabaseclient"
 import { staggerContainer, cardVariants, buttonVariants, scrollReveal } from "../animations/variants"
 import { useUser } from "../context/UserContext"
+import { fireNotification } from "../services/notifications"
 
 
 
@@ -39,7 +40,7 @@ const card = {
 
 export default function Home() {
   const navigate = useNavigate()
-  const { isPremium } = useUser()
+  const { isPremium, displayName } = useUser()
   const REFRESH_INTERVAL = isPremium ? 60 * 60 * 1000 : 5 * 60 * 60 * 1000
   const [data,           setData]        = useState(null)
   const [error,          setError]       = useState(null)
@@ -74,6 +75,69 @@ export default function Home() {
     const interval = setInterval(() => loadData(loc), REFRESH_INTERVAL)
     return () => clearInterval(interval)
   }, [loadData, loadTip])
+
+  // ── AQI auto-notification ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!data || !displayName) return
+    const aqi = Number(data.aqi)
+    const name = displayName
+    const now = Date.now()
+    const todayKey = `aura_notif_day_${new Date().toDateString()}`
+    const lastGoodKey = 'aura_notif_last_good_ts'
+    const lastLevelKey = 'aura_notif_last_level'
+    const FIVE_HOURS = 5 * 60 * 60 * 1000
+
+    const level = aqi <= 50 ? 'good' : aqi <= 100 ? 'moderate' : aqi <= 150 ? 'poor' : aqi <= 200 ? 'unhealthy' : 'hazardous'
+    const lastLevel = localStorage.getItem(lastLevelKey)
+    const isBad = level === 'poor' || level === 'unhealthy' || level === 'hazardous'
+
+    let shouldNotify = false
+
+    if (isBad) {
+      // Always notify when it turns bad/worse, but not if already notified for this same bad level today
+      const badKey = `aura_notif_bad_${level}_${new Date().toDateString()}`
+      if (!localStorage.getItem(badKey)) {
+        shouldNotify = true
+        localStorage.setItem(badKey, '1')
+      }
+    } else {
+      // Good/moderate: once per day AND at most every 5 hours
+      const lastTs = Number(localStorage.getItem(lastGoodKey) || 0)
+      const notifiedToday = localStorage.getItem(todayKey)
+      if (!notifiedToday && (now - lastTs >= FIVE_HOURS)) {
+        shouldNotify = true
+        localStorage.setItem(todayKey, '1')
+        localStorage.setItem(lastGoodKey, String(now))
+      }
+    }
+
+    // Also notify immediately if level just changed to something worse
+    if (lastLevel && lastLevel !== level && isBad) shouldNotify = true
+    localStorage.setItem(lastLevelKey, level)
+
+    if (!shouldNotify) return
+
+    let title, body
+    if (aqi <= 50) {
+      title = `Hey ${name}, the air is great today! 🌿`
+      body  = `AQI is ${aqi} — perfect for outdoor activities. Enjoy the fresh air!`
+    } else if (aqi <= 100) {
+      title = `Hey ${name}, air quality is moderate today 🌤️`
+      body  = `AQI is ${aqi} — sensitive individuals should limit prolonged outdoor exposure.`
+    } else if (aqi <= 150) {
+      title = `Hey ${name}, air quality is poor today ⚠️`
+      body  = `AQI is ${aqi} — consider wearing a mask outdoors and keeping windows closed.`
+    } else if (aqi <= 200) {
+      title = `Hey ${name}, the air is unhealthy today 😷`
+      body  = `AQI is ${aqi} — avoid outdoor activities and keep kids inside.`
+    } else {
+      title = `Hey ${name}, hazardous air quality! 🚨`
+      body  = `AQI is ${aqi} — stay indoors, keep all windows shut, and use air purifiers if possible.`
+    }
+
+    fireNotification(title, body)
+  }, [data, displayName])
+
 
   if (error === "no_location") return (
     <AnimatedPage>
