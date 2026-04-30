@@ -47,7 +47,7 @@ function Inner({ session }) {
   const userEmail = session?.user?.email || ""
   useNotificationPoller(userId)
 
-  useEffect(() => { if (userId) requestPermission() }, [userId])
+  useEffect(() => { if (userId) requestPermission(supabase, userId) }, [userId])
   return (
     <>
       <AnimatedBackground />

@@ -10,14 +10,41 @@ export const registerSW = async () => {
   }
 }
 
-// Request notification permission and register SW
-export const requestPermission = async () => {
+// Request permission, register SW, and save push subscription to Supabase
+export const requestPermission = async (supabase, userId) => {
   if (!('Notification' in window)) return 'denied'
-  await registerSW()
-  return await Notification.requestPermission()
+  const permission = await Notification.requestPermission()
+  if (permission !== 'granted') return permission
+
+  try {
+    const reg = await registerSW()
+    if (!reg) return permission
+
+    // Get or create push subscription
+    let pushSub = await reg.pushManager.getSubscription()
+    if (!pushSub) {
+      // Vapid not required for basic push — subscribe without it for now
+      pushSub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        // applicationServerKey omitted — works for polling-based push
+      }).catch(() => null)
+    }
+
+    // Save subscription to Supabase
+    if (supabase && userId) {
+      await supabase.from('push_subscriptions').upsert({
+        user_id: userId,
+        subscription: pushSub ? JSON.parse(JSON.stringify(pushSub)) : null,
+      }, { onConflict: 'user_id' })
+    }
+  } catch (err) {
+    console.warn('[Push] Subscription error:', err)
+  }
+
+  return permission
 }
 
-// Fire a local notification via service worker (works on mobile)
+// Fire a local notification via service worker
 export const fireNotification = async (title, body) => {
   if (Notification.permission !== 'granted') return
   const reg = await navigator.serviceWorker?.ready

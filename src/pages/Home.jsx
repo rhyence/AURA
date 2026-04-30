@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import AQIGauge from "../components/AQIGauge"
@@ -36,6 +36,46 @@ const card = {
   border: "1px solid rgba(255,255,255,0.07)",
   backdropFilter: "blur(20px)",
   borderRadius: 16,
+}
+
+
+function HomeLoader() {
+  const [progress, setProgress] = React.useState(0)
+  React.useEffect(() => {
+    const start = Date.now()
+    const duration = 2200
+    const frame = () => {
+      const p = Math.min(99, Math.floor(((Date.now() - start) / duration) * 100))
+      setProgress(p)
+      if (p < 99) requestAnimationFrame(frame)
+    }
+    requestAnimationFrame(frame)
+  }, [])
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center",
+                  background: "#0a0a0a", gap: 24, padding: 24 }}>
+      <h1 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 36,
+                   color: "#fff", letterSpacing: "-0.02em" }}>
+        AURA<span style={{ color: "#ff3c3c" }}>.</span>
+      </h1>
+      <div style={{ width: 220, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <span style={{ fontFamily: "DM Mono, monospace", fontSize: 10,
+                         color: "#444", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            loading
+          </span>
+          <span style={{ fontFamily: "DM Mono, monospace", fontSize: 22,
+                         color: "#ff3c3c", fontWeight: 700 }}>{progress}%</span>
+        </div>
+        <div style={{ width: "100%", height: 2, background: "rgba(255,255,255,0.06)", borderRadius: 99 }}>
+          <div style={{ height: "100%", borderRadius: 99,
+                        background: "linear-gradient(90deg, #ff3c3c, #ff8c42)",
+                        width: `${progress}%`, transition: "width 0.05s linear" }} />
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function Home() {
@@ -157,13 +197,7 @@ export default function Home() {
     </AnimatedPage>
   )
 
-  if (loading && !data) return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-      <div style={{ width: 40, height: 40, border: "2px solid #ff3c3c", borderTopColor: "transparent", borderRadius: "50%" }}
-           className="animate-spin" />
-      <p style={{ color: "#555", fontSize: 13, fontFamily: "DM Mono, monospace" }}>loading air quality…</p>
-    </div>
-  )
+  if (loading && !data) return <HomeLoader />
 
   if (error && !data) return (
     <AnimatedPage>
