@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import AQIGauge from "../components/AQIGauge"
 import PollutantModal from "../components/PollutantModal"
+import AqiChart from "../components/AqiChart"
 import AnimatedPage from "../components/AnimatedPage"
 import { fetchAirQuality } from "../services/airquality"
 import { supabase } from "../services/supabaseclient"
@@ -265,18 +266,22 @@ export default function Home() {
             </div>
           </motion.div>
 
-          {/* Pollutants */}
+          {/* Pollutants — premium gated */}
           <motion.div variants={scrollReveal} initial="initial" whileInView="whileInView" viewport={{ once: true }}
-            style={{ ...card, padding: 24 }}
+            style={{ ...card, padding: 24, position: "relative", overflow: "hidden" }}
           >
             <div className="flex items-center justify-between mb-5">
               <h2 style={{ color: "#aaa", fontSize: 11, fontFamily: "DM Mono, monospace", letterSpacing: "0.12em", textTransform: "uppercase" }}>
                 Pollutants
               </h2>
-              <span style={{ fontSize: 11, color: "#444", fontFamily: "DM Mono, monospace" }}>tap for details</span>
+              {isPremium
+                ? <span style={{ fontSize: 11, color: "#444", fontFamily: "DM Mono, monospace" }}>tap for details</span>
+                : <span style={{ fontSize: 10, color: "#ff3c3c", fontFamily: "DM Mono, monospace" }}>⭐ PREMIUM</span>
+              }
             </div>
             <motion.div variants={staggerContainer} initial="initial" whileInView="animate" viewport={{ once: true }}
-              className="grid grid-cols-2 gap-3">
+              className="grid grid-cols-2 gap-3"
+              style={{ filter: isPremium ? "none" : "blur(4px)", pointerEvents: isPremium ? "auto" : "none", userSelect: "none" }}>
               {POLLUTANTS.map(({ key, label, unit, icon, accent }) => (
                 <motion.button key={key} variants={cardVariants}
                   whileHover={{ y: -3, borderColor: accent }}
@@ -299,7 +304,42 @@ export default function Home() {
                 </motion.button>
               ))}
             </motion.div>
+            {!isPremium && (
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                            alignItems: "center", justifyContent: "center", gap: 10 }}>
+                <span style={{ fontSize: 28 }}>🔒</span>
+                <p style={{ color: "#888", fontSize: 13, fontWeight: 600 }}>Pollutant details are premium</p>
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                  onClick={() => navigate("/premium")}
+                  style={{ padding: "8px 20px", background: "#ff3c3c", color: "#fff",
+                           borderRadius: 8, fontSize: 11, fontWeight: 700,
+                           fontFamily: "DM Mono, monospace", letterSpacing: "0.08em" }}>
+                  UPGRADE →
+                </motion.button>
+              </div>
+            )}
           </motion.div>
+
+          {/* AQI Chart — premium gated */}
+          {isPremium
+            ? <AqiChart lat={location?.lat} lng={location?.lng} />
+            : (
+              <motion.div variants={scrollReveal} initial="initial" whileInView="whileInView" viewport={{ once: true }}
+                style={{ ...card, padding: 24, display: "flex", flexDirection: "column", alignItems: "center",
+                         justifyContent: "center", gap: 10, minHeight: 180 }}>
+                <span style={{ fontSize: 28 }}>🔒</span>
+                <p style={{ color: "#888", fontSize: 13, fontWeight: 600 }}>AQI Chart is premium</p>
+                <p style={{ color: "#555", fontSize: 12, textAlign: "center" }}>See how air quality changes throughout the day</p>
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                  onClick={() => navigate("/premium")}
+                  style={{ padding: "8px 20px", background: "#ff3c3c", color: "#fff",
+                           borderRadius: 8, fontSize: 11, fontWeight: 700,
+                           fontFamily: "DM Mono, monospace", letterSpacing: "0.08em" }}>
+                  UPGRADE →
+                </motion.button>
+              </motion.div>
+            )
+          }
 
           {/* Daily Tip */}
           <motion.div variants={scrollReveal} initial="initial" whileInView="whileInView" viewport={{ once: true }}

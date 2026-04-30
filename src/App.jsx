@@ -17,6 +17,7 @@ import Premium      from "./pages/Premium"
 import UserProfile  from "./pages/UserProfile"
 import Login        from "./pages/Login"
 import Dashboard    from "./pages/Dashboard"
+import News         from "./pages/News"
 
 function PrivateRoute({ session, children }) {
   if (session === undefined) return null  // still loading — render nothing
@@ -36,6 +37,7 @@ function AnimatedRoutes({ session }) {
         <Route path="/premium"   element={<PrivateRoute session={session}><Premium /></PrivateRoute>} />
         <Route path="/profile"   element={<PrivateRoute session={session}><UserProfile /></PrivateRoute>} />
         <Route path="/dashboard" element={<PrivateRoute session={session}><Dashboard /></PrivateRoute>} />
+        <Route path="/news"      element={<PrivateRoute session={session}><News /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AnimatePresence>
