@@ -11,9 +11,9 @@ const card = {
 }
 
 const QUERIES = {
-  all:      "air quality OR AQI OR smog OR pollution OR asthma OR volcanic smog OR vog OR wildfire smoke",
+  all:      "air quality pollution asthma smog",
   asthma:   "asthma children air pollution",
-  safety:   "air quality safety health warning smog",
+  safety:   "air quality safety health smog warning",
   vog:      "volcanic smog vog sulfur dioxide",
   wildfire: "wildfire smoke air quality health",
 }
@@ -47,11 +47,11 @@ export default function News() {
     if (!key) { setError("No API key found. Add VITE_NEWS_API_KEY to your .env file."); setLoading(false); return }
     setLoading(true); setError(null)
     const q = encodeURIComponent(QUERIES[filter])
-    fetch(`https://newsapi.org/v2/everything?q=${q}&sortBy=publishedAt&language=en&pageSize=20&apiKey=${key}`)
+    fetch(`https://gnews.io/api/v4/search?q=${q}&sortby=publishedAt&lang=en&max=20&apikey=${key}`)
       .then(r => r.json())
       .then(d => {
-        if (d.status !== "ok") throw new Error(d.message || "API error")
-        setArticles(d.articles.filter(a => a.title !== "[Removed]"))
+        if (!d.articles) throw new Error(d.errors?.[0] || "API error")
+        setArticles(d.articles)
         setLoading(false)
       })
       .catch(e => { setError(e.message); setLoading(false) })
@@ -124,8 +124,8 @@ export default function News() {
                         {a.source?.name} · {timeAgo(a.publishedAt)}
                       </span>
                     </div>
-                    {a.urlToImage && (
-                      <img src={a.urlToImage} alt="" onError={e => e.target.style.display="none"}
+                    {a.image && (
+                      <img src={a.image} alt="" onError={e => e.target.style.display="none"}
                         style={{ width: "100%", height: 160, objectFit: "cover",
                                  borderRadius: 10, marginBottom: 12 }} />
                     )}
