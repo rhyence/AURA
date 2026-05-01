@@ -30,7 +30,7 @@ export default function SupportChat() {
   useEffect(() => {
     if (!userId) return
     supabase.from("support_conversations")
-      .select("id").eq("user_id", userId).single()
+      .select("id").eq("user_id", userId).maybeSingle()
       .then(({ data }) => {
         if (data) { setConvId(data.id); loadMessages(data.id) }
       })
