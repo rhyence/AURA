@@ -23,7 +23,7 @@ export const registerSW = async () => {
 // Request permission, subscribe with VAPID, save endpoint to Supabase
 export const requestPermission = async (supabase, userId) => {
   if (!('Notification' in window)) return 'denied'
-  const permission = await Notification.requestPermission()
+  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
   if (permission !== 'granted') return permission
 
   try {
@@ -58,6 +58,7 @@ export const requestPermission = async (supabase, userId) => {
       const { error } = await supabase.from('push_subscriptions').upsert({
         user_id: userId,
         subscription: JSON.parse(JSON.stringify(pushSub)),
+        updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' })
       if (error) console.error('[Push] Supabase upsert error:', error)
       else console.log('[Push] Subscription saved for user', userId)

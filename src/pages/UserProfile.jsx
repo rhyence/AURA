@@ -33,8 +33,13 @@ export default function UserProfile() {
     console.log('[Toggle] user?.id =', user?.id)
     const next = !notifEnabled
     if (next) {
-      const p = await requestPermission(supabase, user?.id)
-      if (p !== "granted") return
+      // iOS requires Notification.requestPermission() directly in the gesture,
+      // before any other awaits — otherwise it silently blocks
+      if (!('Notification' in window)) return
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') return
+      // Now do SW registration, VAPID subscribe, Supabase upsert
+      await requestPermission(supabase, user?.id)
     } else {
       await removePermission(supabase, user?.id)
     }
