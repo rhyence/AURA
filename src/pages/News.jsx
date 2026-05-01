@@ -44,13 +44,9 @@ export default function News() {
 
   useEffect(() => {
     setLoading(true); setError(null)
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    fetch(`${supabaseUrl}/functions/v1/news-proxy`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-      body: JSON.stringify({ filter })
-    })
+    const key = import.meta.env.VITE_NEWS_API_KEY
+    const query = encodeURIComponent(QUERIES[filter])
+    fetch(`https://gnews.io/api/v4/search?q=${query}&lang=en&max=10&token=${key}`)
       .then(r => r.json())
       .then(d => {
         if (!d.articles) throw new Error(d.error || "API error")
