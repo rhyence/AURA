@@ -13,7 +13,11 @@ export default function UserProfile() {
   const navigate = useNavigate()
   const { isPremium, displayName } = useUser()
   const [user,         setUser]         = useState(null)
-  const [notifEnabled, setNotifEnabled] = useState(() => localStorage.getItem("airaware_notif") !== "false")
+  const [notifEnabled, setNotifEnabled] = useState(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') return true
+    if (typeof Notification !== 'undefined' && Notification.permission === 'denied') return false
+    return localStorage.getItem("airaware_notif") === 'true'
+  })
   const [loggingOut,   setLoggingOut]   = useState(false)
   const [cancelling,   setCancelling]   = useState(false)
   const [showConfirm,  setShowConfirm]  = useState(false)
@@ -33,12 +37,9 @@ export default function UserProfile() {
     console.log('[Toggle] user?.id =', user?.id)
     const next = !notifEnabled
     if (next) {
-      // iOS requires Notification.requestPermission() directly in the gesture,
-      // before any other awaits — otherwise it silently blocks
-      if (!('Notification' in window)) return
+      if (!("Notification" in window)) { alert("Notifications not supported on this device."); return }
       const permission = await Notification.requestPermission()
-      if (permission !== 'granted') return
-      // Now do SW registration, VAPID subscribe, Supabase upsert
+      if (permission !== "granted") return
       await requestPermission(supabase, user?.id)
     } else {
       await removePermission(supabase, user?.id)
