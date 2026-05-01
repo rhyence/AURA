@@ -56,6 +56,7 @@ function Inner({ session }) {
       <AnimatedBackground />
       <div className="relative z-10 min-h-screen">
         {session && <Navbar />}
+        {session && <SupportChat />}
         <AnimatedRoutes session={session} />
       </div>
       {showNamePrompt && userId && (

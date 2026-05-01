@@ -81,15 +81,16 @@ export default function SupportChat() {
     setInput(""); setSending(false)
   }
 
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(null) // null = still checking
 
   useEffect(() => {
     if (!userId) return
-    supabase.from("admins").select("user_id").eq("user_id", userId).single()
-      .then(({ data }) => setIsAdmin(!!data))
+    supabase.from("admins").select("user_id").eq("user_id", userId)
+      .then(({ data }) => setIsAdmin(data && data.length > 0))
   }, [userId])
 
-  if (!userId || isAdmin) return null
+  // Wait until we know if admin or not
+  if (!userId || isAdmin === null || isAdmin) return null
 
   return (
     <>
