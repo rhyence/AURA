@@ -506,104 +506,130 @@ export default function Dashboard() {
       <AnimatePresence>
         {showSupport && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
                      backdropFilter: "blur(8px)", zIndex: 200,
-                     display: "flex", alignItems: "stretch", justifyContent: "center", padding: 16 }}>
-            <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-              style={{ width: "100%", maxWidth: 800, background: "rgba(12,12,12,0.98)",
-                       border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20,
-                       display: "flex", overflow: "hidden", maxHeight: "90vh" }}>
+                     display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+            <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+              style={{ width: "100%", maxWidth: 860, background: "rgba(12,12,12,0.98)",
+                       border: "1px solid rgba(255,255,255,0.08)",
+                       borderRadius: "20px 20px 0 0",
+                       display: "flex", flexDirection: "column",
+                       height: "92dvh", overflow: "hidden" }}>
 
-              {/* Conversations list */}
-              <div style={{ width: 260, borderRight: "1px solid rgba(255,255,255,0.06)",
-                             display: "flex", flexDirection: "column", flexShrink: 0 }}>
-                <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)",
-                               display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              {/* Top bar */}
+              <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+                             display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+                {activeConv ? (
+                  <button onClick={() => setActiveConv(null)}
+                    style={{ color: "#aaa", fontSize: 13, fontFamily: "DM Mono, monospace",
+                               background: "none", border: "none", cursor: "pointer" }}>
+                    ← Back
+                  </button>
+                ) : (
                   <p style={{ color: "#aaa", fontSize: 11, fontFamily: "DM Mono, monospace",
                                letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                    Conversations ({conversations.length})
+                    Support ({conversations.length})
                   </p>
-                  <button onClick={() => { setShowSupport(false); setActiveConv(null) }}
-                    style={{ color: "#444", fontSize: 16 }}>✕</button>
-                </div>
-                <div style={{ overflowY: "auto", flex: 1 }}>
-                  {conversations.length === 0 && (
-                    <p style={{ color: "#444", fontSize: 12, padding: 16, fontFamily: "DM Mono, monospace" }}>
-                      No conversations yet
-                    </p>
-                  )}
-                  {conversations.map(c => (
-                    <div key={c.id} onClick={() => openConv(c)}
-                      style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.04)",
-                                cursor: "pointer",
-                                background: activeConv?.id === c.id ? "rgba(255,60,60,0.08)" : "transparent" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                        <p style={{ color: "#e8e8e8", fontSize: 13, fontWeight: 600 }}>
-                          {c.user_name || c.user_email}
-                        </p>
-                        <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 99, fontFamily: "DM Mono, monospace",
-                                       background: c.status === "open" ? "rgba(255,230,109,0.1)" : "rgba(78,205,196,0.1)",
-                                       color: c.status === "open" ? "#ffe66d" : "#4ecdc4" }}>
-                          {c.status}
-                        </span>
-                      </div>
-                      <p style={{ color: "#555", fontSize: 11, overflow: "hidden",
-                                   textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {c.last_message || "No messages yet"}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                )}
+                <button onClick={() => { setShowSupport(false); setActiveConv(null) }}
+                  style={{ color: "#555", fontSize: 20, background: "none", border: "none", cursor: "pointer" }}>✕</button>
               </div>
 
-              {/* Message thread */}
-              <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                {!activeConv ? (
-                  <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <p style={{ color: "#333", fontSize: 13, fontFamily: "DM Mono, monospace" }}>
-                      Select a conversation
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                      <p style={{ color: "#e8e8e8", fontWeight: 700, fontSize: 14 }}>
-                        {activeConv.user_name || activeConv.user_email}
+              {/* Body */}
+              <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+
+                {/* Conversation list: full width on mobile when no conv selected, sidebar on desktop */}
+                <div style={{
+                  display: activeConv ? "none" : "flex",
+                  flexDirection: "column",
+                  width: "100%",
+                  borderRight: "1px solid rgba(255,255,255,0.06)",
+                  flexShrink: 0,
+                  ...(window.innerWidth >= 600 ? { display: "flex", width: 260 } : {}),
+                }}>
+                  <div style={{ overflowY: "auto", flex: 1 }}>
+                    {conversations.length === 0 && (
+                      <p style={{ color: "#444", fontSize: 12, padding: 20, fontFamily: "DM Mono, monospace", textAlign: "center", marginTop: 40 }}>
+                        No conversations yet
                       </p>
-                      <p style={{ color: "#444", fontSize: 11, fontFamily: "DM Mono, monospace" }}>
-                        {activeConv.user_email}
-                      </p>
-                    </div>
-                    <div style={{ flex: 1, overflowY: "auto", padding: 16,
-                                   display: "flex", flexDirection: "column", gap: 10 }}>
-                      {convMessages.map(m => (
-                        <div key={m.id} style={{ display: "flex", justifyContent: m.is_admin ? "flex-end" : "flex-start" }}>
-                          <div style={{
-                            maxWidth: "75%", padding: "10px 14px", fontSize: 13, lineHeight: 1.5, color: "#e8e8e8",
-                            borderRadius: m.is_admin ? "14px 4px 14px 14px" : "4px 14px 14px 14px",
-                            background: m.is_admin ? "#ff3c3c" : "rgba(255,255,255,0.06)",
-                          }}>
-                            {!m.is_admin && <p style={{ fontSize: 10, color: "#555", fontFamily: "DM Mono, monospace", marginBottom: 4 }}>USER</p>}
-                            {m.content}
-                          </div>
+                    )}
+                    {conversations.map(c => (
+                      <div key={c.id} onClick={() => openConv(c)}
+                        style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                                  cursor: "pointer",
+                                  background: activeConv?.id === c.id ? "rgba(255,60,60,0.08)" : "transparent" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                          <p style={{ color: "#e8e8e8", fontSize: 13, fontWeight: 600 }}>
+                            {c.user_name || c.user_email}
+                          </p>
+                          <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 99, fontFamily: "DM Mono, monospace",
+                                         background: c.status === "open" ? "rgba(255,230,109,0.1)" : "rgba(78,205,196,0.1)",
+                                         color: c.status === "open" ? "#ffe66d" : "#4ecdc4" }}>
+                            {c.status}
+                          </span>
                         </div>
-                      ))}
+                        <p style={{ color: "#555", fontSize: 11, overflow: "hidden",
+                                     textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {c.last_message || "No messages yet"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Message thread */}
+                <div style={{ flex: 1, minWidth: 0,
+                               display: activeConv ? "flex" : "none", flexDirection: "column",
+                               ...(window.innerWidth >= 600 ? { display: "flex" } : {}) }}>
+                  {!activeConv ? (
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <p style={{ color: "#333", fontSize: 13, fontFamily: "DM Mono, monospace" }}>
+                        Select a conversation
+                      </p>
                     </div>
-                    <div style={{ padding: 12, borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8 }}>
-                      <input value={adminReply} onChange={e => setAdminReply(e.target.value)}
-                        onKeyDown={e => e.key === "Enter" && sendAdminReply()}
-                        placeholder="Type a reply…"
-                        style={{ flex: 1, padding: "10px 14px", background: "rgba(28,28,28,0.9)",
-                                  border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10,
-                                  color: "#e8e8e8", fontSize: 13, outline: "none", fontFamily: "Inter, sans-serif" }} />
-                      <motion.button whileTap={{ scale: 0.92 }} onClick={sendAdminReply}
-                        disabled={sendingReply || !adminReply.trim()}
-                        style={{ padding: "10px 16px", background: adminReply.trim() ? "#ff3c3c" : "#222",
-                                  color: "#fff", borderRadius: 10, fontSize: 13, fontWeight: 700,
-                                  transition: "background 0.2s" }}>→</motion.button>
-                    </div>
-                  </>
-                )}
+                  ) : (
+                    <>
+                      <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+                        <p style={{ color: "#e8e8e8", fontWeight: 700, fontSize: 14 }}>
+                          {activeConv.user_name || activeConv.user_email}
+                        </p>
+                        <p style={{ color: "#444", fontSize: 11, fontFamily: "DM Mono, monospace" }}>
+                          {activeConv.user_email}
+                        </p>
+                      </div>
+                      <div style={{ flex: 1, overflowY: "auto", padding: 16, minHeight: 0,
+                                     display: "flex", flexDirection: "column", gap: 10 }}>
+                        {convMessages.map(m => (
+                          <div key={m.id} style={{ display: "flex", justifyContent: m.is_admin ? "flex-end" : "flex-start" }}>
+                            <div style={{
+                              maxWidth: "80%", padding: "10px 14px", fontSize: 13, lineHeight: 1.5,
+                              color: "#e8e8e8", wordBreak: "break-word",
+                              borderRadius: m.is_admin ? "14px 4px 14px 14px" : "4px 14px 14px 14px",
+                              background: m.is_admin ? "#ff3c3c" : "rgba(255,255,255,0.06)",
+                            }}>
+                              {!m.is_admin && <p style={{ fontSize: 10, color: "#555", fontFamily: "DM Mono, monospace", marginBottom: 4 }}>USER</p>}
+                              {m.content}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ padding: 12, borderTop: "1px solid rgba(255,255,255,0.06)",
+                                     display: "flex", gap: 8, flexShrink: 0 }}>
+                        <input value={adminReply} onChange={e => setAdminReply(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && sendAdminReply()}
+                          placeholder="Type a reply…"
+                          style={{ flex: 1, minWidth: 0, padding: "10px 14px", background: "rgba(28,28,28,0.9)",
+                                    border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10,
+                                    color: "#e8e8e8", fontSize: 13, outline: "none", fontFamily: "Inter, sans-serif" }} />
+                        <motion.button whileTap={{ scale: 0.92 }} onClick={sendAdminReply}
+                          disabled={sendingReply || !adminReply.trim()}
+                          style={{ padding: "10px 16px", background: adminReply.trim() ? "#ff3c3c" : "#222",
+                                    color: "#fff", borderRadius: 10, fontSize: 13, fontWeight: 700,
+                                    flexShrink: 0, transition: "background 0.2s" }}>→</motion.button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </motion.div>
           </motion.div>
