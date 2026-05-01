@@ -227,15 +227,16 @@ export default function Dashboard() {
                 ADMIN
               </span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
-              <p style={{ color: "#555", fontSize: 13, fontFamily: "DM Mono, monospace" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+              <p style={{ color: "#555", fontSize: 13, fontFamily: "DM Mono, monospace", minWidth: 0,
+                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
                 {currentUser?.email}
               </p>
               <motion.button variants={buttonVariants} initial="rest" whileHover="hover" whileTap="tap"
                 onClick={() => setShowSupport(true)}
                 style={{ padding: "6px 14px", background: "rgba(78,205,196,0.1)", color: "#4ecdc4",
                          borderRadius: 8, fontSize: 11, fontWeight: 700, fontFamily: "DM Mono, monospace",
-                         border: "1px solid rgba(78,205,196,0.2)", letterSpacing: "0.08em" }}>
+                         border: "1px solid rgba(78,205,196,0.2)", letterSpacing: "0.08em", flexShrink: 0 }}>
                 💬 SUPPORT CHATS
               </motion.button>
             </div>
