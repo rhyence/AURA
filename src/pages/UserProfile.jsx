@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import AnimatedPage from "../components/AnimatedPage"
 import { supabase } from "../services/supabaseclient"
+import { requestPermission, removePermission } from "../services/notifications"
 import { useUser } from "../context/UserContext"
 import { buttonVariants, scrollReveal, backdropVariants, modalVariants } from "../animations/variants"
 
@@ -30,9 +31,11 @@ export default function UserProfile() {
 
   const toggleNotifications = async () => {
     const next = !notifEnabled
-    if (next && "Notification" in window) {
-      const p = await Notification.requestPermission()
+    if (next) {
+      const p = await requestPermission(supabase, user?.id)
       if (p !== "granted") return
+    } else {
+      await removePermission(supabase, user?.id)
     }
     setNotifEnabled(next)
     localStorage.setItem("airaware_notif", String(next))
