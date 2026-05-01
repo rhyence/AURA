@@ -6,7 +6,6 @@ import { supabase } from "../services/supabaseclient"
 import { buttonVariants, scrollReveal, staggerContainer, cardVariants } from "../animations/variants"
 
 const ADMIN_EMAILS = ["andalrhyence@gmail.com"] // ← replace with your email(s)
-const SUPER_ADMIN_EMAIL = "andalrhyence@gmail.com" // Only this account can remove admins
 
 const card = {
   background: "rgba(22,22,22,0.85)",
@@ -42,11 +41,8 @@ export default function Dashboard() {
   const [sendingNotif,  setSendingNotif]  = useState(false)
 
   // Add admin state
-  const [newAdminEmail,  setNewAdminEmail]  = useState("")
-  const [addingAdmin,    setAddingAdmin]    = useState(false)
-  const [adminList,      setAdminList]      = useState([]) // { id, user_id, email }
-  const [removingAdmin,  setRemovingAdmin]  = useState(null) // id being removed
-  const [isSuperAdmin,   setIsSuperAdmin]   = useState(false)
+  const [newAdminEmail, setNewAdminEmail] = useState("")
+  const [addingAdmin,   setAddingAdmin]   = useState(false)
 
   const showToast = (msg, ok = true) => {
     setToast({ msg, ok })
@@ -73,7 +69,6 @@ export default function Dashboard() {
         // Fallback: allow hardcoded emails during initial setup
         setAuthorized(ADMIN_EMAILS.includes(user.email))
       }
-      setIsSuperAdmin(user.email === SUPER_ADMIN_EMAIL)
     }
     check()
   }, [navigate])
@@ -92,30 +87,6 @@ export default function Dashboard() {
   useEffect(() => {
     if (authorized) loadUsers()
   }, [authorized, loadUsers])
-
-  // ── Load admin list ──────────────────────────────────────────────────────────
-  const loadAdmins = useCallback(async () => {
-    const { data: adminRows, error } = await supabase
-      .from("admins")
-      .select("id, user_id")
-      .order("id", { ascending: true })
-    if (error || !adminRows) { setAdminList([]); return }
-
-    // Fetch profile info for each admin separately (avoids FK join requirement)
-    const enriched = await Promise.all(adminRows.map(async (a) => {
-      const { data: p } = await supabase
-        .from("profiles")
-        .select("email, display_name")
-        .eq("id", a.user_id)
-        .maybeSingle()
-      return { ...a, profiles: p || {} }
-    }))
-    setAdminList(enriched)
-  }, [])
-
-  useEffect(() => {
-    if (authorized) loadAdmins()
-  }, [authorized, loadAdmins])
 
   // ── Change plan ──────────────────────────────────────────────────────────────
   const handlePlanChange = async (userId, newPlan) => {
@@ -170,22 +141,7 @@ export default function Dashboard() {
     const { error } = await supabase.from("admins").insert([{ user_id: profile.id }])
     setAddingAdmin(false)
     if (error) showToast("Failed to add admin: " + error.message, false)
-    else { showToast(`${newAdminEmail} is now an admin.`); setNewAdminEmail(""); loadAdmins() }
-  }
-
-  // ── Remove admin (super admin only) ─────────────────────────────────────────
-  const handleRemoveAdmin = async (adminRow) => {
-    if (!isSuperAdmin) { showToast("Only the super admin can remove admins.", false); return }
-    const adminEmail = adminRow.profiles?.email || ""
-    // Prevent removing yourself (super admin)
-    if (adminEmail === SUPER_ADMIN_EMAIL || adminRow.user_id === currentUser?.id) {
-      showToast("You cannot remove yourself.", false); return
-    }
-    setRemovingAdmin(adminRow.id)
-    const { error } = await supabase.from("admins").delete().eq("id", adminRow.id)
-    setRemovingAdmin(null)
-    if (error) showToast("Failed to remove admin: " + error.message, false)
-    else { showToast(`Admin access revoked.`); loadAdmins() }
+    else { showToast(`${newAdminEmail} is now an admin.`); setNewAdminEmail("") }
   }
 
   // ── Render states ────────────────────────────────────────────────────────────
@@ -418,65 +374,9 @@ export default function Dashboard() {
             style={{ ...card, borderTop: "2px solid #4ecdc4", padding: 24 }}>
 
             <h2 style={{ fontSize: 11, color: "#aaa", fontFamily: "DM Mono, monospace", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 20 }}>
-              🛡️ Admin Access
+              🛡️ Add Dashboard Access
             </h2>
 
-            {/* Current admins list */}
-            {adminList.length > 0 && (
-              <div style={{ marginBottom: 20 }}>
-                <p style={{ fontSize: 10, color: "#444", fontFamily: "DM Mono, monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>
-                  Current Admins
-                </p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {adminList.map(a => {
-                    const email = a.profiles?.email || a.user_id
-                    const name = a.profiles?.display_name
-                    const isSelf = a.user_id === currentUser?.id
-                    return (
-                      <div key={a.id} style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                        padding: "10px 14px", background: "rgba(78,205,196,0.05)",
-                        border: "1px solid rgba(78,205,196,0.12)", borderRadius: 10,
-                      }}>
-                        <div>
-                          {name && <p style={{ fontSize: 12, color: "#e8e8e8", fontWeight: 600, marginBottom: 2 }}>{name}</p>}
-                          <p style={{ fontSize: 11, color: "#555", fontFamily: "DM Mono, monospace" }}>{email}</p>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          {isSelf && (
-                            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 99, background: "rgba(78,205,196,0.1)", color: "#4ecdc4", fontFamily: "DM Mono, monospace", letterSpacing: "0.08em" }}>
-                              YOU
-                            </span>
-                          )}
-                          {isSuperAdmin && !isSelf && (
-                            removingAdmin === a.id ? (
-                              <div style={{ width: 16, height: 16, border: "2px solid #ff3c3c", borderTopColor: "transparent", borderRadius: "50%" }} className="animate-spin" />
-                            ) : (
-                              <motion.button
-                                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                                onClick={() => handleRemoveAdmin(a)}
-                                style={{
-                                  padding: "4px 10px", background: "rgba(255,60,60,0.1)",
-                                  border: "1px solid rgba(255,60,60,0.25)", borderRadius: 7,
-                                  color: "#ff3c3c", fontSize: 10, fontWeight: 600,
-                                  fontFamily: "DM Mono, monospace", cursor: "pointer",
-                                }}>
-                                REMOVE
-                              </motion.button>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Add new admin */}
-            <p style={{ fontSize: 10, color: "#444", fontFamily: "DM Mono, monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
-              Add New Admin
-            </p>
             <div style={{ display: "flex", gap: 8 }}>
               <input
                 type="email" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)}
@@ -495,7 +395,7 @@ export default function Dashboard() {
               >{addingAdmin ? "…" : "ADD"}</motion.button>
             </div>
             <p style={{ marginTop: 10, fontSize: 11, color: "#333", fontFamily: "DM Mono, monospace" }}>
-              The user must already have an account. {isSuperAdmin ? "Only you can remove admins." : "Contact the super admin to remove access."}
+              The user must already have an account. Access takes effect on their next sign-in.
             </p>
           </motion.div>
 
@@ -506,17 +406,17 @@ export default function Dashboard() {
       <AnimatePresence>
         {showSupport && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
                      backdropFilter: "blur(8px)", zIndex: 200,
                      display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-            <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-              style={{ width: "100%", maxWidth: 860, background: "rgba(12,12,12,0.98)",
+            <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+              style={{ width: "100%", maxWidth: 800, background: "rgba(12,12,12,0.98)",
                        border: "1px solid rgba(255,255,255,0.08)",
                        borderRadius: "20px 20px 0 0",
                        display: "flex", flexDirection: "column",
-                       height: "92dvh", overflow: "hidden" }}>
+                       height: "90vh", overflow: "hidden" }}>
 
-              {/* Top bar */}
+              {/* Top bar with back button on mobile */}
               <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)",
                              display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
                 {activeConv ? (
@@ -528,28 +428,24 @@ export default function Dashboard() {
                 ) : (
                   <p style={{ color: "#aaa", fontSize: 11, fontFamily: "DM Mono, monospace",
                                letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                    Support ({conversations.length})
+                    Conversations ({conversations.length})
                   </p>
                 )}
                 <button onClick={() => { setShowSupport(false); setActiveConv(null) }}
-                  style={{ color: "#555", fontSize: 20, background: "none", border: "none", cursor: "pointer" }}>✕</button>
+                  style={{ color: "#444", fontSize: 16, background: "none", border: "none", cursor: "pointer" }}>✕</button>
               </div>
 
               {/* Body */}
               <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
 
-                {/* Conversation list: full width on mobile when no conv selected, sidebar on desktop */}
-                <div style={{
-                  display: activeConv ? "none" : "flex",
-                  flexDirection: "column",
-                  width: "100%",
-                  borderRight: "1px solid rgba(255,255,255,0.06)",
-                  flexShrink: 0,
-                  ...(window.innerWidth >= 600 ? { display: "flex", width: 260 } : {}),
-                }}>
+                {/* Conversation list — full screen on mobile unless a conv is open, sidebar on wide screens */}
+                <div style={{ display: "flex", flexDirection: "column", flexShrink: 0,
+                               width: window.innerWidth < 600 ? "100%" : 260,
+                               ...(window.innerWidth < 600 && activeConv ? { display: "none" } : {}),
+                               borderRight: "1px solid rgba(255,255,255,0.06)" }}>
                   <div style={{ overflowY: "auto", flex: 1 }}>
                     {conversations.length === 0 && (
-                      <p style={{ color: "#444", fontSize: 12, padding: 20, fontFamily: "DM Mono, monospace", textAlign: "center", marginTop: 40 }}>
+                      <p style={{ color: "#444", fontSize: 12, padding: 16, fontFamily: "DM Mono, monospace" }}>
                         No conversations yet
                       </p>
                     )}
@@ -577,10 +473,9 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Message thread */}
-                <div style={{ flex: 1, minWidth: 0,
-                               display: activeConv ? "flex" : "none", flexDirection: "column",
-                               ...(window.innerWidth >= 600 ? { display: "flex" } : {}) }}>
+                {/* Message thread — hidden on mobile until conv selected */}
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0,
+                               ...(window.innerWidth < 600 && !activeConv ? { display: "none" } : {}) }}>
                   {!activeConv ? (
                     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <p style={{ color: "#333", fontSize: 13, fontFamily: "DM Mono, monospace" }}>
@@ -589,7 +484,7 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     <>
-                      <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+                      <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
                         <p style={{ color: "#e8e8e8", fontWeight: 700, fontSize: 14 }}>
                           {activeConv.user_name || activeConv.user_email}
                         </p>
@@ -602,7 +497,7 @@ export default function Dashboard() {
                         {convMessages.map(m => (
                           <div key={m.id} style={{ display: "flex", justifyContent: m.is_admin ? "flex-end" : "flex-start" }}>
                             <div style={{
-                              maxWidth: "80%", padding: "10px 14px", fontSize: 13, lineHeight: 1.5,
+                              maxWidth: "75%", padding: "10px 14px", fontSize: 13, lineHeight: 1.5,
                               color: "#e8e8e8", wordBreak: "break-word",
                               borderRadius: m.is_admin ? "14px 4px 14px 14px" : "4px 14px 14px 14px",
                               background: m.is_admin ? "#ff3c3c" : "rgba(255,255,255,0.06)",
