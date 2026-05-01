@@ -30,6 +30,7 @@ export default function UserProfile() {
   }, [navigate])
 
   const toggleNotifications = async () => {
+    console.log('[Toggle] user?.id =', user?.id)
     const next = !notifEnabled
     if (next) {
       const p = await requestPermission(supabase, user?.id)
@@ -135,7 +136,7 @@ export default function UserProfile() {
                 </div>
               </div>
               {isPremium ? (
-                <motion.button whileTap={{ scale:0.92 }} onClick={toggleNotifications}
+                <motion.button whileTap={{ scale:0.92 }} onClick={toggleNotifications} disabled={!user}
                   style={{ position:"relative", width:44, height:24, borderRadius:99, background: notifEnabled?"#ff3c3c":"rgba(255,255,255,0.08)", transition:"background 0.3s", flexShrink:0 }}>
                   <motion.div animate={{ x: notifEnabled?22:2 }} transition={{ type:"spring", stiffness:500, damping:30 }}
                     style={{ position:"absolute", top:3, width:18, height:18, background:"#fff", borderRadius:"50%", boxShadow:"0 1px 4px rgba(0,0,0,0.4)" }} />

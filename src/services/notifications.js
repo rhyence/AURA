@@ -27,33 +27,46 @@ export const requestPermission = async (supabase, userId) => {
   if (permission !== 'granted') return permission
 
   try {
+    if (!VAPID_PUBLIC_KEY) {
+      console.error('[Push] VITE_VAPID_PUBLIC_KEY is not set — cannot subscribe')
+      return permission
+    }
+
     const reg = await registerSW()
     if (!reg) return permission
 
-    // Unsubscribe stale subscription if it exists without VAPID
+    // Unsubscribe stale subscription so we always get a fresh VAPID-signed one
     let pushSub = await reg.pushManager.getSubscription()
     if (pushSub) {
-      // Check if it was subscribed without applicationServerKey — if so, resubscribe
       try { await pushSub.unsubscribe() } catch {}
       pushSub = null
     }
 
-    // Subscribe with VAPID key so the browser push endpoint is server-sendable
+    // Subscribe with VAPID key
     pushSub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
     })
 
+    if (!pushSub) {
+      console.error('[Push] subscribe() returned null — VAPID key may be invalid')
+      return permission
+    }
+
     // Persist to Supabase
     if (supabase && userId) {
-      await supabase.from('push_subscriptions').upsert({
+      const { error } = await supabase.from('push_subscriptions').upsert({
         user_id: userId,
         subscription: JSON.parse(JSON.stringify(pushSub)),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' })
+      if (error) console.error('[Push] Supabase upsert error:', error)
+      else console.log('[Push] Subscription saved for user', userId)
+    } else {
+      console.warn('[Push] supabase or userId missing — row not saved', { supabase: !!supabase, userId })
     }
   } catch (err) {
-    console.warn('[Push] Subscription error:', err)
+    console.error('[Push] Subscription error:', err)
   }
 
   return permission
