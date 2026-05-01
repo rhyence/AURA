@@ -44,17 +44,22 @@ export default function News() {
 
   useEffect(() => {
     setLoading(true); setError(null)
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-    fetch(`${supabaseUrl}/functions/v1/news-proxy`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-      body: JSON.stringify({ filter })
-    })
+    const q = encodeURIComponent(QUERIES[filter])
+    const rss = encodeURIComponent(`https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`)
+    fetch(`https://api.rss2json.com/v1/api.json?rss_url=${rss}&api_key=&count=10`)
       .then(r => r.json())
       .then(d => {
-        if (!d.articles) throw new Error(d.error || "API error")
-        setArticles(d.articles)
+        if (d.status !== "ok") throw new Error("Feed error")
+        // Normalize to the same shape the UI expects
+        const articles = d.items.map(item => ({
+          title: item.title,
+          description: item.description?.replace(/<[^>]+>/g, "").slice(0, 200) || "",
+          url: item.link,
+          image: item.thumbnail || item.enclosure?.link || null,
+          publishedAt: item.pubDate,
+          source: { name: item.author || new URL(item.link).hostname.replace("www.", "") },
+        }))
+        setArticles(articles)
         setLoading(false)
       })
       .catch(e => { setError(e.message); setLoading(false) })
