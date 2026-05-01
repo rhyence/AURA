@@ -95,12 +95,22 @@ export default function Dashboard() {
 
   // ── Load admin list ──────────────────────────────────────────────────────────
   const loadAdmins = useCallback(async () => {
-    // Join admins with profiles to get emails
-    const { data, error } = await supabase
+    const { data: adminRows, error } = await supabase
       .from("admins")
-      .select("id, user_id, profiles(email, display_name)")
+      .select("id, user_id")
       .order("id", { ascending: true })
-    if (!error) setAdminList(data || [])
+    if (error || !adminRows) { setAdminList([]); return }
+
+    // Fetch profile info for each admin separately (avoids FK join requirement)
+    const enriched = await Promise.all(adminRows.map(async (a) => {
+      const { data: p } = await supabase
+        .from("profiles")
+        .select("email, display_name")
+        .eq("id", a.user_id)
+        .maybeSingle()
+      return { ...a, profiles: p || {} }
+    }))
+    setAdminList(enriched)
   }, [])
 
   useEffect(() => {
