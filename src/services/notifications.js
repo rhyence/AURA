@@ -58,7 +58,6 @@ export const requestPermission = async (supabase, userId) => {
       const { error } = await supabase.from('push_subscriptions').upsert({
         user_id: userId,
         subscription: JSON.parse(JSON.stringify(pushSub)),
-        updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' })
       if (error) console.error('[Push] Supabase upsert error:', error)
       else console.log('[Push] Subscription saved for user', userId)
