@@ -54,7 +54,7 @@ function Inner({ session }) {
   return (
     <>
       <AnimatedBackground />
-      <div className="relative z-10 min-h-screen">
+      <div className="relative z-10 min-h-screen" style={{ overflowX: "hidden", maxWidth: "100vw" }}>
         {session && <Navbar />}
         {session && <SupportChat />}
         <AnimatedRoutes session={session} />
