@@ -22,7 +22,7 @@ export default function Navbar() {
     { to: "/location",  label: "Location"  },
     { to: "/child",     label: "Children"  },
     { to: "/tips",      label: "Tips"      },
-    { to: "/news",      label: "News"      },
+    ...(isPremium     ? [{ to: "/news",      label: "News"      }] : []),
     ...(!isPremium    ? [{ to: "/premium",   label: "Premium"   }] : []),
     ...(isAdmin       ? [{ to: "/dashboard", label: "Dashboard",  }] : []),
   ]
