@@ -3,27 +3,25 @@ import AnimatedPage from "../components/AnimatedPage"
 import { staggerContainer, cardVariants, buttonVariants, scrollReveal } from "../animations/variants"
 
 const FREE_FEATURES = [
-  { label: "Real-time AQI for 1 location",   check: true  },
-  { label: "6 pollutant readings",            check: true  },
-  { label: "1 child profile",                 check: true  },
-  { label: "General daily tip",               check: true  },
-  { label: "AQI refreshes every 5 hours",     check: true  },
-  { label: "Multiple child profiles",         check: false },
-  { label: "Personalized health tips",        check: false },
-  { label: "Hourly AQI refresh",              check: false },
-  { label: "AQI push notifications",          check: false },
-  { label: "Priority support",                check: false },
+  { label: "Real-time AQI for 1 location",        free: true  },
+  { label: "6 pollutant readings",                 free: false },
+  { label: "AQI forecast chart",                   free: false },
+  { label: "Personalized health tips",             free: false },
+  { label: "Unlimited child profiles",             free: false },
+  { label: "Local air quality news",               free: false },
+  { label: "AQI push notifications",               free: false },
+  { label: "Priority support",                     free: false },
 ]
 
 const PREMIUM_FEATURES = [
-  { icon: "📍", label: "Real-time AQI for 1 location",                              accent: "#4ecdc4" },
-  { icon: "🌬️", label: "Full pollutant breakdown with health details",               accent: "#3c78ff" },
-  { icon: "👨‍👩‍👧", label: "Unlimited child profiles",                                   accent: "#ffe66d" },
-  { icon: "💡", label: "Personalized tips per child & condition",                    accent: "#ffe66d" },
-  { icon: "⏱️", label: "Hourly AQI refresh (vs 5 hours on free)",                   accent: "#4ecdc4" },
-  { icon: "🔔", label: "Push notifications when AQI becomes unhealthy or improves", accent: "#ff8c42" },
-  { icon: "📊", label: "AQI trend history (coming soon)",                            accent: "#3c78ff" },
-  { icon: "🎖️", label: "Priority customer support",                                  accent: "#ff3c3c" },
+  { icon: "📍", label: "Real-time AQI for your saved location",                      accent: "#4ecdc4" },
+  { icon: "🌬️", label: "All 6 pollutants — PM2.5, PM10, NO₂, SO₂, O₃, CO",          accent: "#3c78ff" },
+  { icon: "📈", label: "AQI forecast chart — see trends before they hit",             accent: "#ffe66d" },
+  { icon: "💡", label: "Personalized tips per child & condition",                     accent: "#ffe66d" },
+  { icon: "👨‍👩‍👧", label: "Unlimited child profiles",                                    accent: "#ff8c42" },
+  { icon: "📰", label: "Local air quality news tailored to your location",            accent: "#ffe66d" },
+  { icon: "🔔", label: "Push notifications when AQI turns unhealthy or improves",    accent: "#ff8c42" },
+  { icon: "🎖️", label: "Priority customer support",                                   accent: "#ff3c3c" },
 ]
 
 const card = {
@@ -125,7 +123,7 @@ export default function Premium() {
                 >
                   <p style={{ fontSize: 13, color: "#888" }}>{f.label}</p>
                   <div style={{ display: "flex", justifyContent: "center" }}>
-                    {f.check
+                    {f.free
                       ? <span style={{ color: "#4ecdc4", fontWeight: 700, fontSize: 14 }}>✓</span>
                       : <span style={{ color: "#333", fontSize: 16 }}>—</span>
                     }

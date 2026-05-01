@@ -43,26 +43,52 @@ function PremiumGate() {
   const navigate = useNavigate()
   return (
     <AnimatedPage>
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center",
-                     justifyContent: "center", padding: "32px 16px" }}>
-        <div style={{ ...card, padding: 36, maxWidth: 360, width: "100%", textAlign: "center",
-                       borderTop: "2px solid #ffe66d" }}>
-          <p style={{ fontSize: 32, marginBottom: 16 }}>🔒</p>
-          <h2 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 22,
-                        color: "#fff", marginBottom: 8 }}>
-            Premium Feature
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column",
+                     alignItems: "center", justifyContent: "center", padding: "0 24px 80px", gap: 28 }}>
+
+        <motion.div initial={{ scale: 0, rotate: -15 }} animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.1 }}
+          style={{
+            width: 88, height: 88, borderRadius: 20,
+            background: "rgba(255,230,109,0.1)", border: "1px solid rgba(255,230,109,0.2)",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44,
+          }}>📰</motion.div>
+
+        <div style={{ textAlign: "center", maxWidth: 320 }}>
+          <h2 style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 28, color: "#fff", marginBottom: 8 }}>
+            Local Air News<span style={{ color: "#ff3c3c" }}>.</span>
           </h2>
-          <p style={{ color: "#555", fontSize: 13, fontFamily: "DM Mono, monospace",
-                       lineHeight: 1.6, marginBottom: 24 }}>
-            Local air quality news tailored to your location is available on the Premium plan.
+          <p style={{ color: "#555", fontSize: 14, lineHeight: 1.65 }}>
+            Get air quality news tailored to your saved location. Available on Premium.
           </p>
-          <motion.button whileTap={{ scale: 0.96 }} onClick={() => navigate("/premium")}
-            style={{ width: "100%", padding: "12px 0", background: "#ffe66d", color: "#111",
-                      borderRadius: 10, fontSize: 12, fontWeight: 700,
-                      fontFamily: "DM Mono, monospace", letterSpacing: "0.1em", cursor: "pointer" }}>
-            UPGRADE TO PREMIUM →
-          </motion.button>
         </div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+          style={{ ...card, padding: 20, width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 12 }}>
+          {[
+            "News filtered by your saved AQI location",
+            "Topics: general, asthma, safety, vog, wildfire",
+            "Sourced from Google News in real time",
+            "Updates every time you open the tab",
+          ].map((f, i) => (
+            <motion.div key={f} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4 + i * 0.08 }}
+              style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "#888" }}>
+              <span style={{ color: "#ffe66d", fontWeight: 700 }}>✓</span> {f}
+            </motion.div>
+          ))}
+        </motion.div>
+
+        <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
+          whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+          onClick={() => navigate("/premium")}
+          style={{
+            padding: "14px 36px",
+            background: "linear-gradient(135deg, #ff3c3c, #ff8c42)",
+            color: "#fff", borderRadius: 10, fontSize: 12, fontWeight: 700,
+            fontFamily: "DM Mono, monospace", letterSpacing: "0.1em",
+          }}
+        >⭐ UPGRADE TO PREMIUM</motion.button>
       </div>
     </AnimatedPage>
   )
