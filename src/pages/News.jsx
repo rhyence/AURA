@@ -11,11 +11,11 @@ const card = {
 }
 
 const QUERIES = {
-  all:      "air quality pollution asthma smog",
-  asthma:   "asthma children air pollution",
-  safety:   "air quality safety health smog warning",
-  vog:      "volcanic smog vog sulfur dioxide",
-  wildfire: "wildfire smoke air quality health",
+  all:      "air quality pollution Philippines",
+  asthma:   "asthma children air pollution Philippines",
+  safety:   "air quality safety health Philippines",
+  vog:      "volcanic smog vog Taal Mayon Philippines",
+  wildfire: "wildfire smoke air quality Philippines",
 }
 
 const TAG_COLORS = {
@@ -45,7 +45,7 @@ export default function News() {
   useEffect(() => {
     setLoading(true); setError(null)
     const q = encodeURIComponent(QUERIES[filter])
-    const rss = encodeURIComponent(`https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`)
+    const rss = encodeURIComponent(`https://news.google.com/rss/search?q=${q}&hl=en-PH&gl=PH&ceid=PH:en`)
     fetch(`https://api.rss2json.com/v1/api.json?rss_url=${rss}&api_key=&count=10`)
       .then(r => r.json())
       .then(d => {
