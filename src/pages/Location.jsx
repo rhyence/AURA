@@ -126,7 +126,7 @@ export default function Location() {
     const loc = { lat: pin.lat, lng: pin.lng, name: placeName }
     localStorage.setItem("airaware_location", JSON.stringify(loc))
     const { data: { user } } = await supabase.auth.getUser()
-    if (user) await supabase.from("profiles").upsert({ id: user.id, last_location: loc }, { onConflict: "id" })
+    if (user) await supabase.from("profiles").upsert({ id: user.id, last_location: loc, lat: pin.lat, lng: pin.lng }, { onConflict: "id" })
     setSaved(true)
     setTimeout(() => navigate("/"), 900)
   }

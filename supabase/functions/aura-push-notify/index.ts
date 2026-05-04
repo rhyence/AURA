@@ -224,29 +224,37 @@ Deno.serve(async (req) => {
   // ── 2. AQI threshold alerts per user ──────────────────────────────────────
   // Only runs when no queue items, to avoid double-notifying
   if (!queueItems?.length) {
-    const { data: subs } = await supabase
+    const { data: subs, error: subsError } = await supabase
       .from("push_subscriptions")
       .select("user_id, subscription, last_aqi_notif_level")
 
-    for (const sub of subs || []) {
-      if (!sub.subscription?.endpoint) continue
+    console.log("[AQI] subs found:", subs?.length, "error:", subsError)
 
-      // Get user's saved location
-      const { data: profile } = await supabase
+    for (const sub of subs || []) {
+      if (!sub.subscription?.endpoint) { console.log("[AQI] skipping - no endpoint"); continue }
+
+      const { data: profile, error: profError } = await supabase
         .from("profiles")
         .select("lat, lng, aqi_alert_threshold")
         .eq("id", sub.user_id)
         .single()
 
-      if (!profile?.lat || !profile?.lng) continue
+      console.log("[AQI] user:", sub.user_id, "profile:", profile, "error:", profError)
 
-      const threshold = profile.aqi_alert_threshold ?? 100 // default: alert above Moderate
+      if (!profile?.lat || !profile?.lng) { console.log("[AQI] skipping - no lat/lng"); continue }
+
+      const threshold = profile.aqi_alert_threshold ?? 100
       const aqi = await fetchCurrentAqi(profile.lat, profile.lng)
-      if (aqi === null) continue
+      console.log("[AQI] aqi:", aqi, "threshold:", threshold)
+      if (aqi === null) { console.log("[AQI] skipping - aqi null"); continue }
 
       const prevLevel = sub.last_aqi_notif_level ?? 0
       const crossed   = aqi > threshold && prevLevel <= threshold
       const recovered = aqi <= threshold && prevLevel > threshold
+
+      // Daily summary: always send at 7am, 12pm, 7pm PHT (23, 4, 11 UTC)
+      const utcHour = new Date().getUTCHours()
+      const isDailySummaryHour = [23, 4, 11].includes(utcHour)
 
       if (crossed) {
         const ok = await sendWebPush(sub.subscription, {
@@ -266,6 +274,16 @@ Deno.serve(async (req) => {
         })
         ok ? pushed++ : failed++
         await supabase.from("push_subscriptions").update({ last_aqi_notif_level: aqi }).eq("user_id", sub.user_id)
+      } else if (isDailySummaryHour) {
+        const label = aqiLabel(aqi)
+        const emoji = aqi <= 50 ? "🟢" : aqi <= 100 ? "🟡" : aqi <= 150 ? "🟠" : "🔴"
+        const ok = await sendWebPush(sub.subscription, {
+          title: `${emoji} Daily Air Update`,
+          body:  `Current AQI: ${aqi} — ${label}`,
+          tag:   "aura-daily-summary",
+          url:   "/dashboard",
+        })
+        ok ? pushed++ : failed++
       }
     }
   }
