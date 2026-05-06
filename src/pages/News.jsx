@@ -13,11 +13,12 @@ const card = {
 }
 
 const QUERIES = {
-  all:      (loc) => `air quality pollution ${loc}`,
+  all:      (loc) => `air quality pollution environment ${loc}`,
   asthma:   (loc) => `asthma children air pollution ${loc}`,
   safety:   (loc) => `air quality safety health ${loc}`,
-  vog:      (loc) => `volcanic smog vog ${loc}`,
+  vog:      (loc) => `volcanic smog vog eruption ${loc}`,
   wildfire: (loc) => `wildfire smoke air quality ${loc}`,
+  disaster: (loc) => `volcano eruption earthquake disaster ${loc}`,
 }
 
 const TAG_COLORS = {
@@ -26,9 +27,10 @@ const TAG_COLORS = {
   safety:   { bg: "rgba(255,230,109,0.1)", text: "#ffe66d" },
   vog:      { bg: "rgba(78,205,196,0.1)",  text: "#4ecdc4" },
   wildfire: { bg: "rgba(255,140,66,0.1)",  text: "#ff8c42" },
+  disaster: { bg: "rgba(180,60,255,0.1)",  text: "#b43cff" },
 }
 
-const FILTERS = ["all", "asthma", "safety", "vog", "wildfire"]
+const FILTERS = ["all", "asthma", "safety", "vog", "wildfire", "disaster"]
 
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime()
