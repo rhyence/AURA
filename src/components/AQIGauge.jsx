@@ -36,7 +36,7 @@ function getLabel(aqi) {
   return                 "Hazardous"
 }
 
-export default function AQIGauge({ aqi }) {
+export default function AQIGauge({ aqi, source, stationName }) {
   const safeAQI = Math.min(Math.max(Number(aqi) || 0, 0), AQI_MAX)
 
   // ── Animate number counter ───────────────────────────────────────────────
@@ -67,7 +67,7 @@ export default function AQIGauge({ aqi }) {
   const label    = getLabel(safeAQI)
 
   return (
-    <div className="flex flex-col items-center select-none">
+    <div className="flex flex-col items-center select-none" style={{ marginTop: 12 }}>
       <div style={{ position: "relative", width: SIZE, height: SIZE * 0.7 }}>
         <svg width={SIZE} height={SIZE} style={{ position: "absolute", top: 0, left: 0 }}>
 
@@ -130,6 +130,30 @@ export default function AQIGauge({ aqi }) {
       >
         {label}
       </motion.p>
+
+      {/* Data source badge */}
+      {source && (
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8, duration: 0.4 }}
+          style={{ marginTop: 8, textAlign: "center" }}
+        >
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: "3px 10px", borderRadius: 99,
+            background: source === "openaq" ? "rgba(78,205,196,0.12)" : "rgba(148,163,184,0.12)",
+            border: `1px solid ${source === "openaq" ? "rgba(78,205,196,0.3)" : "rgba(148,163,184,0.25)"}`,
+            fontSize: 10, fontFamily: "DM Mono, monospace", letterSpacing: "0.04em",
+            color: source === "openaq" ? "#4ecdc4" : "#94a3b8",
+          }}>
+            <span style={{ opacity: 0.7 }}>●</span>
+            {source === "openaq"
+              ? `OpenAQ${stationName ? ` · ${stationName}` : ""}`
+              : "Open-Meteo CAMS"}
+          </span>
+        </motion.div>
+      )}
     </div>
   )
 }

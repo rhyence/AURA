@@ -244,7 +244,7 @@ export default function Home() {
             </div>
 
             <div className="flex justify-center py-2">
-              <AQIGauge aqi={aqi} />
+              <AQIGauge aqi={aqi} source={data?.source} stationName={data?.stationName} />
             </div>
 
             <div className="mt-5 flex items-center justify-between">
