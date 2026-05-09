@@ -67,13 +67,20 @@ async function fetchFromOpenAQ(lat, lng) {
 
     const measRes = await openaqFetch(`/v3/locations/${loc.id}/latest`)
     const measData = await measRes.json()
-    console.log("[OpenAQ] measurements:", measData)
     const readings = measData.results || []
+
+    // v3 /latest doesn't include parameter name — match sensorsId → sensor
+    const sensorMap = {}
+    for (const s of (loc.sensors || [])) {
+      const pname = typeof s.parameter === "object" ? s.parameter?.name : s.parameter
+      sensorMap[s.id] = pname
+    }
+    console.log("[OpenAQ] sensorMap:", sensorMap)
     console.log("[OpenAQ] first reading:", readings[0])
 
     const get = (name) => {
       const r = readings.find(r => {
-        const pname = typeof r.parameter === "object" ? r.parameter?.name : r.parameter
+        const pname = sensorMap[r.sensorsId] ?? ""
         return pname === name || pname === name.replace("pm25", "pm2.5")
       })
       return r?.value ?? null
