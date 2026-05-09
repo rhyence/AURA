@@ -44,21 +44,23 @@ function stationColor(datetimeLast) {
 
 async function fetchPHStations() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+  const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY
   const proxy = `${supabaseUrl}/functions/v1/openaq-proxy`
+  const headers = { 'Authorization': `Bearer ${supabaseAnon}` }
   const centers = [
-    [14.5995, 120.9842], // Manila
-    [14.6760, 121.0437], // QC
-    [10.3157, 123.8854], // Cebu
-    [7.1907,  125.4553], // Davao
-    [16.4023, 120.5960], // Baguio
-    [14.8527, 120.8170], // Pampanga
-    [14.0766, 121.3270], // Laguna
+    [14.5995, 120.9842],
+    [14.6760, 121.0437],
+    [10.3157, 123.8854],
+    [7.1907,  125.4553],
+    [16.4023, 120.5960],
+    [14.8527, 120.8170],
+    [14.0766, 121.3270],
   ]
   try {
     const results = await Promise.all(
       centers.map(([lat, lng]) => {
         const path = encodeURIComponent(`/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=50`)
-        return fetch(`${proxy}?path=${path}`)
+        return fetch(`${proxy}?path=${path}`, { headers })
           .then(async r => {
             const json = await r.json()
             if (!r.ok) { console.warn("[Stations] API error:", json); return [] }

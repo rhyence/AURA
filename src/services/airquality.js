@@ -6,13 +6,16 @@
 // fetchAirQuality() always returns a normalized object with a `source` field:
 //   source: "openaq" | "openmeteo"
 
-const OPENAQ_KEY     = import.meta.env.VITE_OPENAQ_API_KEY
-const OPENMETEO_URL  = "https://air-quality-api.open-meteo.com/v1/air-quality"
-const SUPABASE_URL   = import.meta.env.VITE_SUPABASE_URL
-const OPENAQ_PROXY   = `${SUPABASE_URL}/functions/v1/openaq-proxy`
+const OPENAQ_KEY      = import.meta.env.VITE_OPENAQ_API_KEY
+const OPENMETEO_URL   = "https://air-quality-api.open-meteo.com/v1/air-quality"
+const SUPABASE_URL    = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON   = import.meta.env.VITE_SUPABASE_ANON_KEY
+const OPENAQ_PROXY    = `${SUPABASE_URL}/functions/v1/openaq-proxy`
 
-function openaqUrl(path) {
-  return `${OPENAQ_PROXY}?path=${encodeURIComponent(path)}`
+function openaqFetch(path) {
+  return fetch(`${OPENAQ_PROXY}?path=${encodeURIComponent(path)}`, {
+    headers: { 'Authorization': `Bearer ${SUPABASE_ANON}` }
+  })
 }
 
 // Bounding box for Metro Manila / NCR
@@ -46,9 +49,7 @@ function pm25ToAqi(c) {
 async function fetchFromOpenAQ(lat, lng) {
   try {
     // Find nearest location
-    const locRes = await fetch(
-      openaqUrl(`/v3/locations?coordinates=${lat},${lng}&radius=10000&limit=10`)
-    )
+    const locRes = await openaqFetch(`/v3/locations?coordinates=${lat},${lng}&radius=10000&limit=10`)
     const locData = await locRes.json()
     const locations = locData.results?.filter(l =>
       l.datetimeLast && (Date.now() - new Date(l.datetimeLast.utc).getTime()) < 3 * 3600 * 1000
@@ -60,7 +61,7 @@ async function fetchFromOpenAQ(lat, lng) {
     if (!loc) return null
 
     // Fetch latest measurement
-    const measRes = await fetch(openaqUrl(`/v3/locations/${loc.id}/latest`))
+    const measRes = await openaqFetch(`/v3/locations/${loc.id}/latest`)
     const measData = await measRes.json()
     const readings = measData.results || []
 
