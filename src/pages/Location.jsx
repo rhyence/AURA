@@ -60,18 +60,23 @@ async function fetchPHStations() {
     const results = await Promise.all(
       centers.map(([lat, lng]) =>
         fetch(`https://api.openaq.org/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=50`, { headers })
-          .then(r => r.json()).then(d => d.results || []).catch(() => [])
+          .then(async r => {
+            const json = await r.json()
+            if (!r.ok) { console.warn("[Stations] API error:", json); return [] }
+            return json.results || []
+          })
+          .catch(e => { console.warn("[Stations] fetch error:", e); return [] })
       )
     )
     const all = results.flat()
-    // Deduplicate by id
+    console.log("[Stations] total fetched:", all.length, "key present:", !!key)
     const seen = new Set()
     return all.filter(s => {
       if (!s.coordinates?.latitude || seen.has(s.id)) return false
       seen.add(s.id)
       return true
     })
-  } catch { return [] }
+  } catch(e) { console.error("[Stations] outer error:", e); return [] }
 }
 
 const card = {
