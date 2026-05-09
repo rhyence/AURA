@@ -68,7 +68,7 @@ export default function AQIGauge({ aqi, source, stationName }) {
 
   return (
     <div className="flex flex-col items-center select-none" style={{ marginTop: 12 }}>
-      <div style={{ position: "relative", width: SIZE, height: SIZE * 0.7 }}>
+      <div style={{ position: "relative", width: SIZE, height: SIZE * 0.75 }}>
         <svg width={SIZE} height={SIZE} style={{ position: "absolute", top: 0, left: 0 }}>
 
           {/* ── Track (background arc) ─────────────────────────────────── */}
@@ -137,7 +137,7 @@ export default function AQIGauge({ aqi, source, stationName }) {
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8, duration: 0.4 }}
-          style={{ marginTop: 8, textAlign: "center" }}
+          style={{ marginTop: 16, textAlign: "center" }}
         >
           <span style={{
             display: "inline-flex", alignItems: "center", gap: 4,
