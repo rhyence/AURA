@@ -45,24 +45,26 @@ function pm25ToAqi(c) {
   return null
 }
 
-// ── OpenAQ: nearest active sensor within 10km ────────────────────────────
+// ── OpenAQ: nearest active sensor within 25km ────────────────────────────
 async function fetchFromOpenAQ(lat, lng) {
   try {
-    // Find nearest location
-    const locRes = await openaqFetch(`/v3/locations?coordinates=${lat},${lng}&radius=10000&limit=10`)
+    const locRes = await openaqFetch(`/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=10`)
     const locData = await locRes.json()
+    console.log("[OpenAQ] locations raw:", locData)
+
     const locations = locData.results?.filter(l =>
-      l.datetimeLast && (Date.now() - new Date(l.datetimeLast.utc).getTime()) < 3 * 3600 * 1000
+      l.datetimeLast && (Date.now() - new Date(l.datetimeLast.utc).getTime()) < 24 * 3600 * 1000
     )
+    console.log("[OpenAQ] filtered locations:", locations?.length, locations?.map(l => l.name))
     if (!locations?.length) return null
 
-    // Pick closest with pm25
     const loc = locations.find(l => l.sensors?.some(s => s.parameter?.name === "pm25"))
+    console.log("[OpenAQ] chosen station:", loc?.name)
     if (!loc) return null
 
-    // Fetch latest measurement
     const measRes = await openaqFetch(`/v3/locations/${loc.id}/latest`)
     const measData = await measRes.json()
+    console.log("[OpenAQ] measurements:", measData)
     const readings = measData.results || []
 
     const get = (name) => readings.find(r => r.parameter === name)?.value ?? null
@@ -85,10 +87,10 @@ async function fetchFromOpenAQ(lat, lng) {
       no2,
       so2,
       o3,
-      time:         readings[0]?.datetime?.utc || new Date().toISOString(),
-      source:       "openaq",
-      stationName:  loc.name,
-      stationDist:  Math.round(loc.distance),
+      time:        readings[0]?.datetime?.utc || new Date().toISOString(),
+      source:      "openaq",
+      stationName: loc.name,
+      stationDist: Math.round(loc.distance),
     }
   } catch (err) {
     console.warn("[OpenAQ] fetch error:", err)
