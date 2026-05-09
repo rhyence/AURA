@@ -44,14 +44,33 @@ function stationColor(datetimeLast) {
 
 async function fetchPHStations() {
   const key = import.meta.env.VITE_OPENAQ_API_KEY
-  if (!key) return []
+  // Fetch PH stations using multiple Metro Manila + key city coordinates
+  // since OpenAQ v3 dropped bbox and caps radius at 25km
+  const centers = [
+    [14.5995, 120.9842], // Manila
+    [14.6760, 121.0437], // QC
+    [10.3157, 123.8854], // Cebu
+    [7.1907,  125.4553], // Davao
+    [16.4023, 120.5960], // Baguio
+    [14.8527, 120.8170], // Pampanga
+    [14.0766, 121.3270], // Laguna
+  ]
+  const headers = key ? { "X-API-Key": key } : {}
   try {
-    const res = await fetch(
-      "https://api.openaq.org/v3/locations?bbox=116.9,4.6,126.6,20.8&limit=200",
-      { headers: { "X-API-Key": key } }
+    const results = await Promise.all(
+      centers.map(([lat, lng]) =>
+        fetch(`https://api.openaq.org/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=50`, { headers })
+          .then(r => r.json()).then(d => d.results || []).catch(() => [])
+      )
     )
-    const data = await res.json()
-    return (data.results || []).filter(s => s.coordinates?.latitude && s.coordinates?.longitude)
+    const all = results.flat()
+    // Deduplicate by id
+    const seen = new Set()
+    return all.filter(s => {
+      if (!s.coordinates?.latitude || seen.has(s.id)) return false
+      seen.add(s.id)
+      return true
+    })
   } catch { return [] }
 }
 
