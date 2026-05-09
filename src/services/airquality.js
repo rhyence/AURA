@@ -58,7 +58,10 @@ async function fetchFromOpenAQ(lat, lng) {
     console.log("[OpenAQ] filtered locations:", locations?.length, locations?.map(l => l.name))
     if (!locations?.length) return null
 
-    const loc = locations.find(l => l.sensors?.some(s => s.parameter?.name === "pm25"))
+    const loc = locations.find(l => l.sensors?.some(s => {
+      const pname = typeof s.parameter === "object" ? s.parameter?.name : s.parameter
+      return pname === "pm25" || pname === "pm2.5"
+    }))
     console.log("[OpenAQ] chosen station:", loc?.name)
     if (!loc) return null
 
@@ -66,10 +69,15 @@ async function fetchFromOpenAQ(lat, lng) {
     const measData = await measRes.json()
     console.log("[OpenAQ] measurements:", measData)
     const readings = measData.results || []
-    console.log("[OpenAQ] reading parameters:", readings.map(r => r.parameter))
+    console.log("[OpenAQ] first reading:", readings[0])
 
-    const get = (name) =>
-      readings.find(r => r.parameter === name || r.parameter === name.replace("pm25", "pm2.5"))?.value ?? null
+    const get = (name) => {
+      const r = readings.find(r => {
+        const pname = typeof r.parameter === "object" ? r.parameter?.name : r.parameter
+        return pname === name || pname === name.replace("pm25", "pm2.5")
+      })
+      return r?.value ?? null
+    }
 
     const pm25 = get("pm25")
     const pm10 = get("pm10")
