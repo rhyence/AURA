@@ -66,8 +66,10 @@ async function fetchFromOpenAQ(lat, lng) {
     const measData = await measRes.json()
     console.log("[OpenAQ] measurements:", measData)
     const readings = measData.results || []
+    console.log("[OpenAQ] reading parameters:", readings.map(r => r.parameter))
 
-    const get = (name) => readings.find(r => r.parameter === name)?.value ?? null
+    const get = (name) =>
+      readings.find(r => r.parameter === name || r.parameter === name.replace("pm25", "pm2.5"))?.value ?? null
 
     const pm25 = get("pm25")
     const pm10 = get("pm10")
