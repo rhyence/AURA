@@ -126,7 +126,7 @@ export default function AQIGauge({ aqi, source, stationName }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.6, duration: 0.4 }}
-        style={{ fontSize: 15, fontWeight: 600, color, marginTop: -10 }}
+        style={{ fontSize: 15, fontWeight: 600, color, marginTop: -20 }}
       >
         {label}
       </motion.p>
