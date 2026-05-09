@@ -135,10 +135,9 @@ async function fetchFromOpenMeteo(lat, lng) {
 
 // ── Public API ────────────────────────────────────────────────────────────
 export async function fetchAirQuality(lat, lng) {
-  if (isMetroManila(lat, lng) && OPENAQ_KEY) {
+  if (isMetroManila(lat, lng)) {
     const result = await fetchFromOpenAQ(lat, lng)
     if (result) return result
-    // Fall through to Open-Meteo if OpenAQ fails or no nearby station
     console.warn("[AQ] OpenAQ had no result, falling back to Open-Meteo")
   }
   return fetchFromOpenMeteo(lat, lng)
