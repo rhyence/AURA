@@ -126,7 +126,7 @@ export default function AQIGauge({ aqi, source, stationName }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.6, duration: 0.4 }}
-        style={{ fontSize: 15, fontWeight: 600, color, marginTop: -20 }}
+        style={{ fontSize: 15, fontWeight: 600, color, marginTop: -10 }}
       >
         {label}
       </motion.p>
@@ -137,7 +137,7 @@ export default function AQIGauge({ aqi, source, stationName }) {
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8, duration: 0.4 }}
-          style={{ marginTop: 20, textAlign: "center" }}
+          style={{ marginTop: 50, textAlign: "center" }}
         >
           <span style={{
             display: "inline-flex", alignItems: "center", gap: 4,
