@@ -5,7 +5,7 @@ import AQIGauge from "../components/AQIGauge"
 import PollutantModal from "../components/PollutantModal"
 import AqiChart from "../components/AqiChart"
 import AnimatedPage from "../components/AnimatedPage"
-import { fetchAirQuality, findNearestStation, fetchAirQualityByStationId } from "../services/airquality"
+import { fetchAirQuality, fetchAirQualityByUid, findNearestStation } from "../services/airquality"
 import { supabase } from "../services/supabaseclient"
 import { staggerContainer, cardVariants, buttonVariants, scrollReveal } from "../animations/variants"
 import { useUser } from "../context/UserContext"
@@ -91,8 +91,8 @@ export default function Home() {
       fake = Math.min(85, fake + Math.random() * 15)
       setLoadProgress(Math.floor(fake))
     }, 150)
-    const result = loc.stationId
-      ? await fetchAirQualityByStationId(loc.stationId, loc.stationName, loc.sensors)
+    const result = loc.uid
+      ? await fetchAirQualityByUid(loc.uid)
       : await fetchAirQuality(loc.lat, loc.lng)
     clearInterval(ticker)
     if (!result) {

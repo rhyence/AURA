@@ -2,14 +2,14 @@ import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { scrollReveal } from "../animations/variants"
 
-const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openaq-proxy`
+const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aqicn-proxy`
 const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 const card = {
-  background:    "rgba(22,22,22,0.85)",
-  border:        "1px solid rgba(255,255,255,0.07)",
-  backdropFilter:"blur(20px)",
-  borderRadius:  16,
+  background:     "rgba(22,22,22,0.85)",
+  border:         "1px solid rgba(255,255,255,0.07)",
+  backdropFilter: "blur(20px)",
+  borderRadius:   16,
 }
 
 function aqiColor(aqi) {
@@ -20,58 +20,15 @@ function aqiColor(aqi) {
   return "#c0392b"
 }
 
-function pm25ToAqi(c) {
-  if (c == null) return null
-  const BP = [
-    [0.0,   9.0,   0,   50],
-    [9.1,   35.4,  51,  100],
-    [35.5,  55.4,  101, 150],
-    [55.5,  125.4, 151, 200],
-    [125.5, 225.4, 201, 300],
-    [225.5, 325.4, 301, 500],
-  ]
-  for (const [cLo, cHi, aLo, aHi] of BP) {
-    if (c >= cLo && c <= cHi)
-      return Math.round(((aHi - aLo) / (cHi - cLo)) * (c - cLo) + aLo)
-  }
-  return null
-}
-
-async function findPm25SensorId(lat, lng) {
-  // Nearest location within 25km, fresh within 24h, with pm25 sensor
+async function fetchForecast(lat, lng) {
   const res = await fetch(
-    `${PROXY_BASE}?path=${encodeURIComponent(`/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=10`)}`,
+    `${PROXY_BASE}?path=${encodeURIComponent(`/feed/geo:${lat};${lng}/`)}`,
     { headers: { Authorization: `Bearer ${ANON_KEY}` } }
   )
   if (!res.ok) return null
-  const data = await res.json()
-  const locations = (data.results || []).filter(
-    (l) =>
-      l.datetimeLast &&
-      Date.now() - new Date(l.datetimeLast.utc).getTime() < 24 * 3600 * 1000
-  )
-  const loc = locations.find((l) =>
-    l.sensors?.some((s) => s.parameter?.name === "pm25")
-  )
-  if (!loc) return null
-  const sensor = loc.sensors.find((s) => s.parameter?.name === "pm25")
-  return sensor?.id ?? null
-}
-
-async function fetchLast24h(sensorId) {
-  const now    = new Date()
-  const past   = new Date(now.getTime() - 24 * 3600 * 1000)
-  const toISO  = (d) => d.toISOString().replace(".000", "")
-  const openaqPath =
-    `/v3/sensors/${sensorId}/measurements` +
-    `?period_name=hour&datetime_from=${toISO(past)}&datetime_to=${toISO(now)}&limit=24`
-  const url = `${PROXY_BASE}?path=${encodeURIComponent(openaqPath)}`
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${ANON_KEY}` },
-  })
-  if (!res.ok) return []
-  const data = await res.json()
-  return data.results || []
+  const json = await res.json()
+  if (json.status !== "ok") return null
+  return json.data?.forecast?.daily?.pm25 ?? null
 }
 
 export default function AqiChart({ lat, lng }) {
@@ -80,26 +37,24 @@ export default function AqiChart({ lat, lng }) {
 
   useEffect(() => {
     if (!lat || !lng) { setLoading(false); return }
-
     let cancelled = false
     async function load() {
       try {
-        const sensorId = await findPm25SensorId(lat, lng)
-        if (!sensorId || cancelled) { setLoading(false); return }
+        const daily = await fetchForecast(lat, lng)
+        if (!daily || cancelled) { setLoading(false); return }
 
-        const measurements = await fetchLast24h(sensorId)
-        if (cancelled) return
-
-        const pts = measurements
-          .map((m) => {
-            const hour = new Date(m.period?.datetimeTo?.utc || m.datetime?.utc)
-            const val  = m.value ?? m.average ?? null
-            return { hour: hour.getHours(), aqi: pm25ToAqi(val), ts: hour.getTime() }
+        // daily is an array of { avg, min, max, day } where day is "YYYY-MM-DD"
+        const pts = daily
+          .map((d) => {
+            const avg = d.avg ?? null
+            if (avg === null) return null
+            const date  = new Date(d.day + "T00:00:00")
+            const label = date.toLocaleDateString("en-PH", { month: "short", day: "numeric" })
+            return { label, aqi: avg, min: d.min ?? avg, max: d.max ?? avg }
           })
-          .filter((p) => p.aqi !== null)
-          .sort((a, b) => a.ts - b.ts)
+          .filter(Boolean)
 
-        setPoints(pts)
+        if (!cancelled) setPoints(pts)
       } catch (e) {
         console.warn("[AqiChart] error:", e)
       } finally {
@@ -110,15 +65,13 @@ export default function AqiChart({ lat, lng }) {
     return () => { cancelled = true }
   }, [lat, lng])
 
-  // Hide chart entirely if no data (never show model fallback)
   if (loading || points.length === 0) return null
 
-  const max  = Math.max(...points.map((p) => p.aqi), 100)
-  const now  = new Date().getHours()
+  const maxVal = Math.max(...points.map((p) => p.max), 100)
   const W    = 600
   const H    = 120
   const PAD  = 8
-  const barW = (W - PAD * 2) / points.length - 2
+  const barW = Math.floor((W - PAD * 2) / points.length) - 3
 
   return (
     <motion.div
@@ -127,39 +80,50 @@ export default function AqiChart({ lat, lng }) {
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <h2 style={{ color: "#aaa", fontSize: 11, fontFamily: "DM Mono, monospace",
-                     letterSpacing: "0.12em", textTransform: "uppercase" }}>PM2.5 AQI — Last 24 Hours</h2>
-        <span style={{ fontSize: 10, color: "#444", fontFamily: "DM Mono, monospace" }}>ground sensor</span>
+                     letterSpacing: "0.12em", textTransform: "uppercase" }}>PM2.5 Forecast</h2>
+        <span style={{ fontSize: 10, color: "#444", fontFamily: "DM Mono, monospace" }}>AQICN forecast</span>
       </div>
 
       <div style={{ overflowX: "auto" }}>
-        <svg viewBox={`0 0 ${W} ${H + 30}`} style={{ width: "100%", minWidth: 300 }}>
+        <svg viewBox={`0 0 ${W} ${H + 36}`} style={{ width: "100%", minWidth: 260 }}>
           {points.map((p, i) => {
-            const x       = PAD + i * ((W - PAD * 2) / points.length)
-            const barH    = Math.max(4, (p.aqi / max) * H)
-            const y       = H - barH
-            const isCurr  = p.hour === now
-            const color   = aqiColor(p.aqi)
+            const x      = PAD + i * ((W - PAD * 2) / points.length)
+            const barH   = Math.max(4, (p.aqi / maxVal) * H)
+            const y      = H - barH
+            const color  = aqiColor(p.aqi)
+            const isToday = i === 0
             return (
               <g key={i}>
+                {/* Range bar (min–max) */}
+                {p.max > p.min && (() => {
+                  const maxH = Math.max(4, (p.max / maxVal) * H)
+                  const minH = Math.max(2, (p.min / maxVal) * H)
+                  return (
+                    <rect x={x + barW * 0.3} y={H - maxH}
+                      width={barW * 0.4} height={maxH - minH}
+                      fill={color} opacity={0.18} rx={2} />
+                  )
+                })()}
+                {/* Avg bar */}
                 <rect x={x} y={y} width={barW} height={barH}
-                  fill={color} opacity={isCurr ? 1 : 0.45} rx={3} />
-                {isCurr && (
+                  fill={color} opacity={isToday ? 1 : 0.5} rx={3} />
+                {isToday && (
                   <rect x={x - 1} y={y - 1} width={barW + 2} height={barH + 2}
                     fill="none" stroke={color} strokeWidth={1.5} rx={3} />
                 )}
-                {(p.hour % 6 === 0 || isCurr) && (
-                  <text x={x + barW / 2} y={H + 18}
-                    textAnchor="middle" fontSize={9}
-                    fill={isCurr ? color : "#444"}
-                    fontFamily="DM Mono, monospace">
-                    {p.hour === 0 ? "12a" : p.hour < 12 ? `${p.hour}a` : p.hour === 12 ? "12p" : `${p.hour - 12}p`}
-                  </text>
-                )}
-                {isCurr && (
-                  <text x={x + barW / 2} y={y - 6}
-                    textAnchor="middle" fontSize={10} fontWeight="700"
-                    fill={color} fontFamily="DM Mono, monospace">{p.aqi}</text>
-                )}
+                {/* AQI value above bar */}
+                <text x={x + barW / 2} y={y - 5}
+                  textAnchor="middle" fontSize={9} fontWeight={isToday ? "700" : "400"}
+                  fill={isToday ? color : "#555"} fontFamily="DM Mono, monospace">
+                  {Math.round(p.aqi)}
+                </text>
+                {/* Date label */}
+                <text x={x + barW / 2} y={H + 20}
+                  textAnchor="middle" fontSize={9}
+                  fill={isToday ? color : "#444"}
+                  fontFamily="DM Mono, monospace">
+                  {isToday ? "today" : p.label}
+                </text>
               </g>
             )
           })}
