@@ -1,18 +1,15 @@
-// Air Quality Service — AQICN (WAQI) via Supabase Edge Function proxy
+// Air Quality Service — IQAir (AirVisual) via Supabase Edge Function proxy
 //
-// Strategy:
-//   All locations → AQICN /feed/geo:{lat};{lng}/ via aqicn-proxy (token never in frontend)
-//   fetchAirQuality(lat, lng)  → geo lookup, returns normalized object or null
-//   fetchAirQualityByUid(uid)  → uid-based lookup for saved station dots
-//   findNearestStation()       → no-op returning null (WAQI geo lookup handles proximity)
+// Free Community tier endpoints used:
+//   /nearest_city?lat=&lon=  → geo lookup, returns city-level AQI + pollutants + 7-day forecast
 //
 // Normalized return shape:
-//   { aqi, pm25, pm10, no2, so2, o3, co, time, source, stationName, stationLat, stationLng, forecast }
+//   { aqi, pm25, pm10, no2, so2, o3, co, time, source, stationName, forecasts_daily }
 
-const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aqicn-proxy`
+const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/iqair-proxy`
 const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-// ── EPA PM2.5 → AQI breakpoints (kept for chart use, not applied to main fetch) ──
+// ── EPA PM2.5 → AQI breakpoints (exported for chart use) ─────────────────
 const PM25_BP = [
   [0.0,   9.0,   0,   50],
   [9.1,   35.4,  51,  100],
@@ -31,73 +28,64 @@ export function pm25ToAqi(c) {
   return null
 }
 
-// ── Proxy fetch helper ────────────────────────────────────────────────────────
-async function waqiFetch(path) {
+// ── Proxy fetch helper ────────────────────────────────────────────────────
+async function iqairFetch(path) {
   const res = await fetch(`${PROXY_BASE}?path=${encodeURIComponent(path)}`, {
     headers: { Authorization: `Bearer ${ANON_KEY}` },
   })
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`aqicn-proxy ${res.status}: ${text}`)
+    throw new Error(`iqair-proxy ${res.status}: ${text}`)
   }
   const json = await res.json()
-  // WAQI wraps everything in { status, data }
-  if (json.status !== "ok") throw new Error(`WAQI error: ${json.data ?? json.status}`)
+  if (json.status !== "success") {
+    throw new Error(`IQAir error: ${json.data ?? json.status}`)
+  }
   return json.data
 }
 
-// ── Normalize a WAQI data object into the app's common shape ─────────────────
+// ── Normalize IQAir response into app's common shape ──────────────────────
 function normalize(data) {
-  if (!data || data === "Unknown station" || typeof data === "string") return null
+  if (!data) return null
 
-  const aqi = Number(data.aqi)
-  if (isNaN(aqi) || aqi < 0) return null
+  const pollution = data.current?.pollution
+  if (!pollution) return null
 
-  const g = (key) => data.iaqi?.[key]?.v ?? null
+  const aqi = pollution.aqius
+  if (aqi == null || isNaN(Number(aqi))) return null
+
+  // IQAir pollutant keys: p2=PM2.5, p1=PM10, o3=O3, n2=NO2, s2=SO2, co=CO
+  const g = (key) => pollution[key]?.conc ?? null
 
   return {
-    aqi,
-    pm25:        g("pm25"),
-    pm10:        g("pm10"),
-    no2:         g("no2"),
-    so2:         g("so2"),
-    o3:          g("o3"),
-    co:          g("co"),
-    time:        data.time?.iso ?? new Date().toISOString(),
-    source:      "aqicn",
-    stationName: data.city?.name ?? "Unknown station",
-    stationLat:  data.city?.geo?.[0] ?? null,
-    stationLng:  data.city?.geo?.[1] ?? null,
-    // Expose full forecast for AqiChart
-    forecast:    data.forecast ?? null,
+    aqi:            Number(aqi),
+    pm25:           g("p2"),
+    pm10:           g("p1"),
+    o3:             g("o3"),
+    no2:            g("n2"),
+    so2:            g("s2"),
+    co:             g("co"),
+    time:           pollution.ts ?? new Date().toISOString(),
+    source:         "iqair",
+    stationName:    [data.city, data.state, data.country].filter(Boolean).join(", "),
+    forecasts_daily: data.forecasts_daily ?? [],
   }
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// ── Public API ────────────────────────────────────────────────────────────
 
-/** Geo-based lookup — used for arbitrary map taps and first load */
+/** Geo-based lookup — used for map taps and home screen */
 export async function fetchAirQuality(lat, lng) {
   try {
-    const data = await waqiFetch(`/feed/geo:${lat};${lng}/`)
+    const data = await iqairFetch(`/nearest_city?lat=${lat}&lon=${lng}`)
     return normalize(data)
   } catch (err) {
-    console.warn("[AQICN] fetchAirQuality error:", err)
+    console.warn("[IQAir] fetchAirQuality error:", err)
     return null
   }
 }
 
-/** UID-based lookup — used when user has a saved station uid */
-export async function fetchAirQualityByUid(uid) {
-  try {
-    const data = await waqiFetch(`/feed/@${uid}/`)
-    return normalize(data)
-  } catch (err) {
-    console.warn("[AQICN] fetchAirQualityByUid error:", err)
-    return null
-  }
-}
-
-/** No-op — WAQI geo lookup handles proximity automatically */
+/** No-op — IQAir free tier is geo-only, no station ID lookup */
 export async function findNearestStation(_lat, _lng) {
   return null
 }

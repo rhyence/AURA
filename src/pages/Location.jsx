@@ -1,10 +1,10 @@
 import "leaflet/dist/leaflet.css"
 import L from "leaflet"
-import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMap, useMapEvents } from "react-leaflet"
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet"
 import { useState, useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
-import { fetchAirQuality, fetchAirQualityByUid } from "../services/airquality"
+import { fetchAirQuality } from "../services/airquality"
 import { supabase } from "../services/supabaseclient"
 
 delete L.Icon.Default.prototype._getIconUrl
@@ -13,9 +13,6 @@ L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
   shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 })
-
-const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aqicn-proxy`
-const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 function FlyTo({ target }) {
   const map = useMap()
@@ -37,34 +34,6 @@ function getStatus(aqi) {
   return               { label: "Hazardous",               accent: "#c026d3" }
 }
 
-function aqiDotColor(aqi) {
-  const n = Number(aqi)
-  if (isNaN(n) || n < 0) return "#555"
-  if (n <= 50)  return "#4ecdc4"
-  if (n <= 100) return "#ffe66d"
-  if (n <= 150) return "#ff8c42"
-  if (n <= 200) return "#ff3c3c"
-  return "#c026d3"
-}
-
-async function fetchWaqiStations(latMin, lngMin, latMax, lngMax) {
-  try {
-    const path = `/map/bounds/?latlng=${latMin},${lngMin},${latMax},${lngMax}`
-    const res  = await fetch(
-      `${PROXY_BASE}?path=${encodeURIComponent(path)}`,
-      { headers: { Authorization: `Bearer ${ANON_KEY}` } }
-    )
-    if (!res.ok) return []
-    const json = await res.json()
-    if (json.status !== "ok") return []
-    // Returns array of { uid, lat, lon, station: { name }, aqi }
-    return (json.data ?? []).filter((s) => s.lat && s.lon)
-  } catch (e) {
-    console.warn("[Stations] fetchWaqiStations error:", e)
-    return []
-  }
-}
-
 const card = {
   background: "rgba(22,22,22,0.9)",
   border: "1px solid rgba(255,255,255,0.07)",
@@ -81,31 +50,20 @@ const inp = {
 
 export default function Location() {
   const navigate = useNavigate()
-  const [query,           setQuery]           = useState("")
-  const [flyTo,           setFlyTo]           = useState(null)
-  const [pin,             setPin]             = useState(null)
-  const [placeName,       setPlaceName]       = useState("")
-  const [searching,       setSearching]       = useState(false)
-  const [mapStyle,        setMapStyle]        = useState("dark")
-  const [locating,        setLocating]        = useState(false)
-  const [error,           setError]           = useState(null)
-  const [saved,           setSaved]           = useState(false)
-  const [preview,         setPreview]         = useState(null)
-  const [loadingAQI,      setLoadingAQI]      = useState(false)
-  const [stations,        setStations]        = useState([])
-  const [showStations,    setShowStations]    = useState(true)
-  const [loadingStations, setLoadingStations] = useState(false)
-  const [selectedStation, setSelectedStation] = useState(null) // { uid, name }
-
-  useEffect(() => {
-    // Load WAQI stations for Philippines bounding box
-    setLoadingStations(true)
-    fetchWaqiStations(4.5, 116.0, 21.5, 127.0)
-      .then((s) => { setStations(s); setLoadingStations(false) })
-  }, [])
+  const [query,      setQuery]      = useState("")
+  const [flyTo,      setFlyTo]      = useState(null)
+  const [pin,        setPin]        = useState(null)
+  const [placeName,  setPlaceName]  = useState("")
+  const [searching,  setSearching]  = useState(false)
+  const [mapStyle,   setMapStyle]   = useState("dark")
+  const [locating,   setLocating]   = useState(false)
+  const [error,      setError]      = useState(null)
+  const [saved,      setSaved]      = useState(false)
+  const [preview,    setPreview]    = useState(null)
+  const [loadingAQI, setLoadingAQI] = useState(false)
 
   const resolvePin = useCallback(async (latlng) => {
-    setPin(latlng); setSaved(false); setPreview(null); setPlaceName(""); setSelectedStation(null)
+    setPin(latlng); setSaved(false); setPreview(null); setPlaceName("")
     try {
       const res  = await fetch(
         `https://nominatim.openstreetmap.org/reverse?lat=${latlng.lat}&lon=${latlng.lng}&format=json`,
@@ -126,21 +84,7 @@ export default function Location() {
     if (aqiData) setPreview(aqiData)
   }, [])
 
-  const handleMapClick = (latlng) => resolvePin(latlng)
-
-  const handleStationClick = useCallback(async (station) => {
-    const latlng = { lat: Number(station.lat), lng: Number(station.lon) }
-    setPin(latlng)
-    setSaved(false)
-    setPreview(null)
-    setPlaceName(station.station?.name ?? `Station ${station.uid}`)
-    setFlyTo(latlng)
-    setSelectedStation({ uid: station.uid, name: station.station?.name ?? `Station ${station.uid}` })
-    setLoadingAQI(true)
-    const aqiData = await fetchAirQualityByUid(station.uid)
-    setLoadingAQI(false)
-    if (aqiData) setPreview(aqiData)
-  }, [])
+  const handleMapClick    = (latlng) => resolvePin(latlng)
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -178,15 +122,7 @@ export default function Location() {
 
   const handleConfirm = async () => {
     if (!pin) return
-    const loc = {
-      lat:  pin.lat,
-      lng:  pin.lng,
-      name: placeName,
-      ...(selectedStation && {
-        uid:         selectedStation.uid,
-        stationName: selectedStation.name,
-      }),
-    }
+    const loc = { lat: pin.lat, lng: pin.lng, name: placeName }
     localStorage.setItem("airaware_location", JSON.stringify(loc))
     const { data: { user } } = await supabase.auth.getUser()
     if (user) await supabase.from("profiles").upsert({ id: user.id, last_location: loc }, { onConflict: "id" })
@@ -229,26 +165,8 @@ export default function Location() {
 
         {error && <p style={{ color: "#ff3c3c", fontSize: 12, fontFamily: "DM Mono, monospace", marginBottom: 12 }}>{error}</p>}
 
-        {/* Map toolbar */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
-          <button onClick={() => setShowStations(v => !v)}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600, fontFamily: "DM Mono, monospace", cursor: "pointer", transition: "all 0.2s", background: showStations ? "rgba(78,205,196,0.12)" : "rgba(255,255,255,0.04)", border: `1px solid ${showStations ? "rgba(78,205,196,0.35)" : "rgba(255,255,255,0.08)"}`, color: showStations ? "#4ecdc4" : "#555" }}
-          >
-            <span style={{ fontSize: 8 }}>●</span>
-            {loadingStations ? "LOADING…" : showStations ? `${stations.length} STATIONS` : "SHOW STATIONS"}
-          </button>
-
-          {showStations && (
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              {[["#4ecdc4","Good"],["#ffe66d","Moderate"],["#ff8c42","Poor"],["#ff3c3c","Unhealthy"],["#c026d3","Hazardous"]].map(([color, label]) => (
-                <span key={label} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontFamily: "DM Mono, monospace", color: "#555" }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, display: "inline-block" }} />
-                  {label}
-                </span>
-              ))}
-            </div>
-          )}
-
+        {/* Map style toggle */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
           <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 3, gap: 3 }}>
             {[["dark", "🌑 Dark"], ["color", "🗺️ Color"]].map(([val, label]) => (
               <button key={val} onClick={() => setMapStyle(val)}
@@ -269,31 +187,11 @@ export default function Location() {
             {flyTo && <FlyTo target={flyTo} />}
             <ClickHandler onSelect={handleMapClick} />
             {pin && <Marker position={pin} />}
-
-            {showStations && stations.map((s) => {
-              const color = aqiDotColor(s.aqi)
-              return (
-                <CircleMarker
-                  key={s.uid}
-                  center={[Number(s.lat), Number(s.lon)]}
-                  radius={6}
-                  pathOptions={{ color, fillColor: color, fillOpacity: 0.85, weight: 1.5 }}
-                  eventHandlers={{ click: (e) => { e.originalEvent.stopPropagation(); handleStationClick(s) } }}
-                >
-                  <Tooltip direction="top" offset={[0, -6]} opacity={1}>
-                    <div style={{ fontFamily: "DM Mono, monospace", fontSize: 11, lineHeight: 1.7, minWidth: 140 }}>
-                      <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 2 }}>{s.station?.name ?? `Station ${s.uid}`}</div>
-                      <div style={{ color, fontSize: 11 }}>AQI {s.aqi}</div>
-                    </div>
-                  </Tooltip>
-                </CircleMarker>
-              )
-            })}
           </MapContainer>
         </div>
 
         <p style={{ fontSize: 11, color: "#333", fontFamily: "DM Mono, monospace", textAlign: "center", marginBottom: 16 }}>
-          tap the map to pin a location · tap a station dot to select it
+          tap the map to pin a location · or search above
         </p>
 
         {pin && (
@@ -320,11 +218,9 @@ export default function Location() {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: status.accent, fontFamily: "DM Mono, monospace", letterSpacing: "0.08em" }}>{status.label.toUpperCase()}</span>
-                  {preview.source && (
-                    <p style={{ fontSize: 10, color: "#555", fontFamily: "DM Mono, monospace", marginTop: 4 }}>
-                      via AQICN
-                    </p>
-                  )}
+                  <p style={{ fontSize: 10, color: "#555", fontFamily: "DM Mono, monospace", marginTop: 4 }}>
+                    {preview.stationName}
+                  </p>
                 </div>
               </div>
             )}

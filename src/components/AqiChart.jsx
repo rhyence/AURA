@@ -1,9 +1,5 @@
-import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { scrollReveal } from "../animations/variants"
-
-const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aqicn-proxy`
-const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 const card = {
   background:     "rgba(22,22,22,0.85)",
@@ -20,54 +16,25 @@ function aqiColor(aqi) {
   return "#c0392b"
 }
 
-async function fetchForecast(lat, lng) {
-  const res = await fetch(
-    `${PROXY_BASE}?path=${encodeURIComponent(`/feed/geo:${lat};${lng}/`)}`,
-    { headers: { Authorization: `Bearer ${ANON_KEY}` } }
-  )
-  if (!res.ok) return null
-  const json = await res.json()
-  if (json.status !== "ok") return null
-  return json.data?.forecast?.daily?.pm25 ?? null
-}
+// AqiChart now receives forecasts_daily directly from the parent (Home.jsx)
+// instead of fetching it itself — data is already in the fetchAirQuality response.
+export default function AqiChart({ forecasts }) {
+  if (!forecasts || forecasts.length === 0) return null
 
-export default function AqiChart({ lat, lng }) {
-  const [points,  setPoints]  = useState([])
-  const [loading, setLoading] = useState(true)
+  const points = forecasts
+    .map((d) => {
+      const aqi = d.aqius ?? null
+      if (aqi == null) return null
+      const date  = new Date(d.ts)
+      const label = date.toLocaleDateString("en-PH", { month: "short", day: "numeric" })
+      return { label, aqi: Number(aqi) }
+    })
+    .filter(Boolean)
+    .slice(0, 7) // max 7 days
 
-  useEffect(() => {
-    if (!lat || !lng) { setLoading(false); return }
-    let cancelled = false
-    async function load() {
-      try {
-        const daily = await fetchForecast(lat, lng)
-        if (!daily || cancelled) { setLoading(false); return }
+  if (points.length === 0) return null
 
-        // daily is an array of { avg, min, max, day } where day is "YYYY-MM-DD"
-        const pts = daily
-          .map((d) => {
-            const avg = d.avg ?? null
-            if (avg === null) return null
-            const date  = new Date(d.day + "T00:00:00")
-            const label = date.toLocaleDateString("en-PH", { month: "short", day: "numeric" })
-            return { label, aqi: avg, min: d.min ?? avg, max: d.max ?? avg }
-          })
-          .filter(Boolean)
-
-        if (!cancelled) setPoints(pts)
-      } catch (e) {
-        console.warn("[AqiChart] error:", e)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [lat, lng])
-
-  if (loading || points.length === 0) return null
-
-  const maxVal = Math.max(...points.map((p) => p.max), 100)
+  const maxVal = Math.max(...points.map((p) => p.aqi), 100)
   const W    = 600
   const H    = 120
   const PAD  = 8
@@ -80,44 +47,31 @@ export default function AqiChart({ lat, lng }) {
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <h2 style={{ color: "#aaa", fontSize: 11, fontFamily: "DM Mono, monospace",
-                     letterSpacing: "0.12em", textTransform: "uppercase" }}>PM2.5 Forecast</h2>
-        <span style={{ fontSize: 10, color: "#444", fontFamily: "DM Mono, monospace" }}>AQICN forecast</span>
+                     letterSpacing: "0.12em", textTransform: "uppercase" }}>AQI Forecast</h2>
+        <span style={{ fontSize: 10, color: "#444", fontFamily: "DM Mono, monospace" }}>7-day · IQAir</span>
       </div>
 
       <div style={{ overflowX: "auto" }}>
         <svg viewBox={`0 0 ${W} ${H + 36}`} style={{ width: "100%", minWidth: 260 }}>
           {points.map((p, i) => {
-            const x      = PAD + i * ((W - PAD * 2) / points.length)
-            const barH   = Math.max(4, (p.aqi / maxVal) * H)
-            const y      = H - barH
-            const color  = aqiColor(p.aqi)
+            const x     = PAD + i * ((W - PAD * 2) / points.length)
+            const barH  = Math.max(4, (p.aqi / maxVal) * H)
+            const y     = H - barH
+            const color = aqiColor(p.aqi)
             const isToday = i === 0
             return (
               <g key={i}>
-                {/* Range bar (min–max) */}
-                {p.max > p.min && (() => {
-                  const maxH = Math.max(4, (p.max / maxVal) * H)
-                  const minH = Math.max(2, (p.min / maxVal) * H)
-                  return (
-                    <rect x={x + barW * 0.3} y={H - maxH}
-                      width={barW * 0.4} height={maxH - minH}
-                      fill={color} opacity={0.18} rx={2} />
-                  )
-                })()}
-                {/* Avg bar */}
                 <rect x={x} y={y} width={barW} height={barH}
                   fill={color} opacity={isToday ? 1 : 0.5} rx={3} />
                 {isToday && (
                   <rect x={x - 1} y={y - 1} width={barW + 2} height={barH + 2}
                     fill="none" stroke={color} strokeWidth={1.5} rx={3} />
                 )}
-                {/* AQI value above bar */}
                 <text x={x + barW / 2} y={y - 5}
                   textAnchor="middle" fontSize={9} fontWeight={isToday ? "700" : "400"}
                   fill={isToday ? color : "#555"} fontFamily="DM Mono, monospace">
                   {Math.round(p.aqi)}
                 </text>
-                {/* Date label */}
                 <text x={x + barW / 2} y={H + 20}
                   textAnchor="middle" fontSize={9}
                   fill={isToday ? color : "#444"}
@@ -130,7 +84,6 @@ export default function AqiChart({ lat, lng }) {
         </svg>
       </div>
 
-      {/* Legend */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 8 }}>
         {[["#4ecdc4","Good"],["#ffe66d","Moderate"],["#ff8c42","Poor"],["#ff3c3c","Unhealthy"]].map(([c, l]) => (
           <div key={l} style={{ display: "flex", alignItems: "center", gap: 4 }}>
