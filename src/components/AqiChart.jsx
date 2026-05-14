@@ -40,7 +40,7 @@ function pm25ToAqi(c) {
 async function findPm25SensorId(lat, lng) {
   // Nearest location within 25km, fresh within 24h, with pm25 sensor
   const res = await fetch(
-    `${PROXY_BASE}/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=10`,
+    `${PROXY_BASE}?path=${encodeURIComponent(`/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=10`)}`,
     { headers: { Authorization: `Bearer ${ANON_KEY}` } }
   )
   if (!res.ok) return null
@@ -62,9 +62,10 @@ async function fetchLast24h(sensorId) {
   const now    = new Date()
   const past   = new Date(now.getTime() - 24 * 3600 * 1000)
   const toISO  = (d) => d.toISOString().replace(".000", "")
-  const url =
-    `${PROXY_BASE}/v3/sensors/${sensorId}/measurements` +
+  const openaqPath =
+    `/v3/sensors/${sensorId}/measurements` +
     `?period_name=hour&datetime_from=${toISO(past)}&datetime_to=${toISO(now)}&limit=24`
+  const url = `${PROXY_BASE}?path=${encodeURIComponent(openaqPath)}`
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${ANON_KEY}` },
   })

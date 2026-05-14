@@ -95,11 +95,10 @@ export default function Home() {
     clearInterval(ticker)
     if (!result) {
       setLoadProgress(0)
+      setError("no_sensor_data")  // set immediately so render guard fires
       setLoading(false)
-      // Look for nearest station to show informative message
-      const nearest = await findNearestStation(loc.lat, loc.lng)
-      setNearestStation(nearest)
-      setError("no_sensor_data")
+      // Then async-fill nearest station info for the error screen
+      findNearestStation(loc.lat, loc.lng).then(nearest => setNearestStation(nearest))
       return
     }
     setLoadProgress(100)

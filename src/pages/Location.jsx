@@ -62,7 +62,7 @@ async function fetchPHStations() {
     const results = await Promise.all(
       centers.map(([lat, lng]) =>
         fetch(
-          `${PROXY_BASE}/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=50`,
+          `${PROXY_BASE}?path=${encodeURIComponent(`/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=50`)}`,
           { headers }
         )
           .then(async (r) => {

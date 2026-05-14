@@ -30,8 +30,9 @@ function pm25ToAqi(c) {
 }
 
 // ── Proxy fetch helper ────────────────────────────────────────────────────
+// The openaq-proxy Edge Function reads the OpenAQ path from ?path=
 async function proxyFetch(path) {
-  const res = await fetch(`${PROXY_BASE}${path}`, {
+  const res = await fetch(`${PROXY_BASE}?path=${encodeURIComponent(path)}`, {
     headers: { Authorization: `Bearer ${ANON_KEY}` },
   })
   if (!res.ok) {
