@@ -1,13 +1,15 @@
-// Air Quality Service — IQAir (AirVisual) direct from frontend
+// Air Quality Service — IQAir (AirVisual) via Supabase Edge Function proxy
 //
-// IQAir community keys are low-risk to expose: 10k calls/month hard cap,
-// no billing attached. No proxy needed.
+// Calls go through the iqair-proxy Edge Function so the API key stays
+// server-side and the api-airvisual.com hostname resolves from Supabase's
+// network (avoids ERR_NAME_NOT_RESOLVED from client browsers).
 //
 // Normalized return shape:
 //   { aqi, pm25, pm10, no2, so2, o3, co, time, source, stationName, forecasts_daily }
 
-const IQAIR_BASE = "https://api-airvisual.com/v2"
-const IQAIR_KEY  = import.meta.env.VITE_IQAIR_API_KEY
+const SUPABASE_URL   = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON  = import.meta.env.VITE_SUPABASE_ANON_KEY
+const PROXY_BASE     = `${SUPABASE_URL}/functions/v1/iqair-proxy`
 
 // ── EPA PM2.5 → AQI breakpoints (exported for chart use) ─────────────────
 const PM25_BP = [
@@ -56,13 +58,17 @@ function normalize(data) {
 
 // ── Public API ────────────────────────────────────────────────────────────
 
-/** Geo-based lookup — used for map taps and home screen */
+/** Geo-based lookup — routed through iqair-proxy Edge Function */
 export async function fetchAirQuality(lat, lng) {
   try {
-    const res = await fetch(
-      `${IQAIR_BASE}/nearest_city?lat=${lat}&lon=${lng}&key=${IQAIR_KEY}`
-    )
-    if (!res.ok) throw new Error(`IQAir ${res.status}`)
+    const path = encodeURIComponent(`/nearest_city?lat=${lat}&lon=${lng}`)
+    const res = await fetch(`${PROXY_BASE}?path=${path}`, {
+      headers: {
+        "apikey":        SUPABASE_ANON,
+        "Authorization": `Bearer ${SUPABASE_ANON}`,
+      },
+    })
+    if (!res.ok) throw new Error(`iqair-proxy ${res.status}`)
     const json = await res.json()
     if (json.status !== "success") throw new Error(`IQAir: ${json.data}`)
     return normalize(json.data)
