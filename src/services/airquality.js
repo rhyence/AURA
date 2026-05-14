@@ -126,3 +126,45 @@ export async function findNearestStation(lat, lng) {
 export async function fetchAirQuality(lat, lng) {
   return fetchFromOpenAQ(lat, lng)
 }
+
+// Fetch a specific known station by ID (used when user clicks a station dot)
+export async function fetchAirQualityByStationId(locationId, locationName, sensors) {
+  try {
+    // Build sensorMap from the station's sensors array (already available from fetchPHStations)
+    const sensorMap = {}
+    for (const s of sensors || []) {
+      if (s.id != null && s.parameter?.name) {
+        sensorMap[s.id] = s.parameter.name
+      }
+    }
+
+    const measData = await proxyFetch(`/v3/locations/${locationId}/latest`)
+    const readings = measData.results || []
+
+    const get = (name) => {
+      const r = readings.find((r) => sensorMap[r.sensorsId] === name)
+      return r?.value ?? null
+    }
+
+    const pm25 = get("pm25")
+    const aqi  = pm25ToAqi(pm25)
+    if (aqi === null) return null
+
+    return {
+      aqi,
+      pm25,
+      pm10:        get("pm10"),
+      co:          get("co"),
+      no2:         get("no2"),
+      so2:         get("so2"),
+      o3:          get("o3"),
+      time:        readings[0]?.datetime?.utc || new Date().toISOString(),
+      source:      "openaq",
+      stationName: locationName,
+      stationDist: 0,
+    }
+  } catch (err) {
+    console.warn("[OpenAQ] fetchByStationId error:", err)
+    return null
+  }
+}

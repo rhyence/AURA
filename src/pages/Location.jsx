@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMap, useMapE
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
-import { fetchAirQuality } from "../services/airquality"
+import { fetchAirQuality, fetchAirQualityByStationId } from "../services/airquality"
 import { supabase } from "../services/supabaseclient"
 
 delete L.Icon.Default.prototype._getIconUrl
@@ -147,6 +147,19 @@ export default function Location() {
 
   const handleMapClick = (latlng) => resolvePin(latlng)
 
+  const handleStationClick = async (station) => {
+    const latlng = { lat: station.coordinates.latitude, lng: station.coordinates.longitude }
+    setPin(latlng)
+    setSaved(false)
+    setPreview(null)
+    setPlaceName(station.name)
+    setFlyTo(latlng)
+    setLoadingAQI(true)
+    const aqiData = await fetchAirQualityByStationId(station.id, station.name, station.sensors)
+    setLoadingAQI(false)
+    if (aqiData) setPreview(aqiData)
+  }
+
   const handleSearch = async (e) => {
     e.preventDefault()
     if (!query.trim()) return
@@ -274,8 +287,9 @@ export default function Location() {
                 ? new Date(s.datetimeLast.utc).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
                 : "Unknown"
               return (
-                <CircleMarker key={s.id} center={[s.coordinates.latitude, s.coordinates.longitude]} radius={5}
+                <CircleMarker key={s.id} center={[s.coordinates.latitude, s.coordinates.longitude]} radius={6}
                   pathOptions={{ color, fillColor: color, fillOpacity: 0.85, weight: 1.5 }}
+                  eventHandlers={{ click: (e) => { e.originalEvent.stopPropagation(); handleStationClick(s) } }}
                 >
                   <Tooltip direction="top" offset={[0, -6]} opacity={1}>
                     <div style={{ fontFamily: "DM Mono, monospace", fontSize: 11, lineHeight: 1.7, minWidth: 140 }}>
@@ -292,7 +306,7 @@ export default function Location() {
         </div>
 
         <p style={{ fontSize: 11, color: "#333", fontFamily: "DM Mono, monospace", textAlign: "center", marginBottom: 16 }}>
-          tap the map to pin a location · dots = active OpenAQ stations
+          tap the map to pin a location · tap a station dot to select it
         </p>
 
         {pin && (
