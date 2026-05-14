@@ -8,7 +8,6 @@
 //   { aqi, pm25, pm10, no2, so2, o3, co, time, source, stationName, forecasts_daily }
 
 const SUPABASE_URL   = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_ANON  = import.meta.env.VITE_SUPABASE_ANON_KEY
 const PROXY_BASE     = `${SUPABASE_URL}/functions/v1/iqair-proxy`
 
 // ── EPA PM2.5 → AQI breakpoints (exported for chart use) ─────────────────
@@ -62,12 +61,7 @@ function normalize(data) {
 export async function fetchAirQuality(lat, lng) {
   try {
     const path = encodeURIComponent(`/nearest_city?lat=${lat}&lon=${lng}`)
-    const res = await fetch(`${PROXY_BASE}?path=${path}`, {
-      headers: {
-        "apikey":        SUPABASE_ANON,
-        "Authorization": `Bearer ${SUPABASE_ANON}`,
-      },
-    })
+    const res = await fetch(`${PROXY_BASE}?path=${path}`)
     if (!res.ok) throw new Error(`iqair-proxy ${res.status}`)
     const json = await res.json()
     if (json.status !== "success") throw new Error(`IQAir: ${json.data}`)
