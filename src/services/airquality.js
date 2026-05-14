@@ -61,7 +61,9 @@ function normalize(data) {
 export async function fetchAirQuality(lat, lng) {
   try {
     const path = encodeURIComponent(`/nearest_city?lat=${lat}&lon=${lng}`)
-    const res = await fetch(`${PROXY_BASE}?path=${path}`)
+    const res = await fetch(`${PROXY_BASE}?path=${path}`, {
+      headers: { "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+    })
     if (!res.ok) throw new Error(`iqair-proxy ${res.status}`)
     const json = await res.json()
     if (json.status !== "success") throw new Error(`IQAir: ${json.data}`)
