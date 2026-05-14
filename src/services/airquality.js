@@ -1,37 +1,21 @@
-// Air Quality Service
-// Strategy:
-//   Metro Manila (NCR) → OpenAQ v3 real sensor network (Clarity + Manila Observatory)
-//   Everywhere else    → Open-Meteo CAMS model (no station required)
+// Air Quality Service — OpenAQ only, via Supabase Edge Function proxy
 //
-// fetchAirQuality() always returns a normalized object with a `source` field:
-//   source: "openaq" | "openmeteo"
+// Strategy:
+//   All locations → OpenAQ v3 via openaq-proxy (no direct API calls, no API key in frontend)
+//   No station found within 25 km → return null (no fabricated satellite data)
+//
+// fetchAirQuality() returns a normalized object or null.
+//   { aqi, pm25, pm10, no2, so2, o3, co, time, source, stationName, stationDist }
 
-const OPENAQ_KEY      = import.meta.env.VITE_OPENAQ_API_KEY
-const OPENMETEO_URL   = "https://air-quality-api.open-meteo.com/v1/air-quality"
-const SUPABASE_URL    = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_ANON   = import.meta.env.VITE_SUPABASE_ANON_KEY
-const OPENAQ_PROXY    = `${SUPABASE_URL}/functions/v1/openaq-proxy`
+const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openaq-proxy`
+const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-function openaqFetch(path) {
-  return fetch(`${OPENAQ_PROXY}?path=${encodeURIComponent(path)}`, {
-    headers: { 'Authorization': `Bearer ${SUPABASE_ANON}` }
-  })
-}
-
-// Bounding box for Metro Manila / NCR
-const NCR_BOUNDS = { latMin: 14.35, latMax: 14.80, lngMin: 120.88, lngMax: 121.20 }
-
-function isMetroManila(lat, lng) {
-  return lat  >= NCR_BOUNDS.latMin && lat  <= NCR_BOUNDS.latMax
-      && lng  >= NCR_BOUNDS.lngMin && lng  <= NCR_BOUNDS.lngMax
-}
-
-// ── EPA PM2.5 → AQI conversion ────────────────────────────────────────────
+// ── EPA PM2.5 → AQI breakpoints ──────────────────────────────────────────
 const PM25_BP = [
-  [0.0,  9.0,   0,  50],
-  [9.1,  35.4,  51, 100],
-  [35.5, 55.4,  101, 150],
-  [55.5, 125.4, 151, 200],
+  [0.0,   9.0,   0,   50],
+  [9.1,   35.4,  51,  100],
+  [35.5,  55.4,  101, 150],
+  [55.5,  125.4, 151, 200],
   [125.5, 225.4, 201, 300],
   [225.5, 325.4, 301, 500],
 ]
@@ -45,69 +29,74 @@ function pm25ToAqi(c) {
   return null
 }
 
-// ── OpenAQ: nearest active sensor within 25km ────────────────────────────
+// ── Proxy fetch helper ────────────────────────────────────────────────────
+async function proxyFetch(path) {
+  const res = await fetch(`${PROXY_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${ANON_KEY}` },
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Proxy ${res.status}: ${text}`)
+  }
+  return res.json()
+}
+
+// ── OpenAQ fetch via proxy ────────────────────────────────────────────────
 async function fetchFromOpenAQ(lat, lng) {
   try {
-    const locRes = await openaqFetch(`/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=10`)
-    const locData = await locRes.json()
-    console.log("[OpenAQ] locations raw:", locData)
-
-    const locations = locData.results?.filter(l =>
-      l.datetimeLast && (Date.now() - new Date(l.datetimeLast.utc).getTime()) < 24 * 3600 * 1000
+    // 1. Nearest locations within 25 km, fresh within 24 h
+    const locData = await proxyFetch(
+      `/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=10`
     )
-    console.log("[OpenAQ] filtered locations:", locations?.length, locations?.map(l => l.name))
-    if (!locations?.length) return null
+    const locations = (locData.results || []).filter(
+      (l) =>
+        l.datetimeLast &&
+        Date.now() - new Date(l.datetimeLast.utc).getTime() < 24 * 3600 * 1000
+    )
+    if (!locations.length) return null
 
-    const loc = locations.find(l => l.sensors?.some(s => {
-      const pname = typeof s.parameter === "object" ? s.parameter?.name : s.parameter
-      return pname === "pm25" || pname === "pm2.5"
-    }))
-    console.log("[OpenAQ] chosen station:", loc?.name)
+    // 2. Pick closest location that has a pm25 sensor
+    const loc = locations.find((l) =>
+      l.sensors?.some((s) => s.parameter?.name === "pm25")
+    )
     if (!loc) return null
 
-    const measRes = await openaqFetch(`/v3/locations/${loc.id}/latest`)
-    const measData = await measRes.json()
+    // 3. Build sensorId → parameter name map from loc.sensors
+    //    /v3/locations/{id}/latest returns sensorsId (not parameter) on each reading;
+    //    we resolve parameter names via this map.
+    const sensorMap = {}
+    for (const s of loc.sensors || []) {
+      if (s.id != null && s.parameter?.name) {
+        sensorMap[s.id] = s.parameter.name
+      }
+    }
+
+    // 4. Fetch latest readings
+    const measData = await proxyFetch(`/v3/locations/${loc.id}/latest`)
     const readings = measData.results || []
 
-    // v3 /latest doesn't include parameter name — match sensorsId → sensor
-    const sensorMap = {}
-    for (const s of (loc.sensors || [])) {
-      const pname = typeof s.parameter === "object" ? s.parameter?.name : s.parameter
-      sensorMap[s.id] = pname
-    }
-    console.log("[OpenAQ] sensorMap:", sensorMap)
-    console.log("[OpenAQ] first reading:", readings[0])
-
+    // 5. Resolve values by parameter name via sensorMap
     const get = (name) => {
-      const r = readings.find(r => {
-        const pname = sensorMap[r.sensorsId] ?? ""
-        return pname === name || pname === name.replace("pm25", "pm2.5")
-      })
+      const r = readings.find((r) => sensorMap[r.sensorsId] === name)
       return r?.value ?? null
     }
 
     const pm25 = get("pm25")
-    const pm10 = get("pm10")
-    const no2  = get("no2")
-    const so2  = get("so2")
-    const o3   = get("o3")
-    const co   = get("co")
-
-    const aqi = pm25ToAqi(pm25)
+    const aqi  = pm25ToAqi(pm25)
     if (aqi === null) return null
 
     return {
       aqi,
       pm25,
-      pm10,
-      co,
-      no2,
-      so2,
-      o3,
+      pm10:        get("pm10"),
+      co:          get("co"),
+      no2:         get("no2"),
+      so2:         get("so2"),
+      o3:          get("o3"),
       time:        readings[0]?.datetime?.utc || new Date().toISOString(),
       source:      "openaq",
       stationName: loc.name,
-      stationDist: Math.round(loc.distance),
+      stationDist: Math.round(loc.distance ?? 0),
     }
   } catch (err) {
     console.warn("[OpenAQ] fetch error:", err)
@@ -115,49 +104,24 @@ async function fetchFromOpenAQ(lat, lng) {
   }
 }
 
-// ── Open-Meteo CAMS fallback ──────────────────────────────────────────────
-function getCurrentHourIndex(times) {
-  const currentHour = new Date().toISOString().slice(0, 13)
-  const idx = times.findIndex(t => t.startsWith(currentHour))
-  return idx !== -1 ? idx : times.length - 1
-}
-
-async function fetchFromOpenMeteo(lat, lng) {
+// ── Nearest station within 100 km (for outside-coverage info message) ─────
+export async function findNearestStation(lat, lng) {
   try {
-    const params = new URLSearchParams({
-      latitude:      lat,
-      longitude:     lng,
-      hourly:        "pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,us_aqi",
-      timezone:      "Asia/Manila",
-      forecast_days: 1,
-    })
-    const res  = await fetch(`${OPENMETEO_URL}?${params}`)
-    const data = await res.json()
-    if (!data.hourly) throw new Error("No data")
-    const idx = getCurrentHourIndex(data.hourly.time)
+    const locData = await proxyFetch(
+      `/v3/locations?coordinates=${lat},${lng}&radius=100000&limit=3`
+    )
+    const first = (locData.results || [])[0]
+    if (!first) return null
     return {
-      aqi:    data.hourly.us_aqi[idx],
-      pm25:   data.hourly.pm2_5[idx],
-      pm10:   data.hourly.pm10[idx],
-      co:     data.hourly.carbon_monoxide[idx],
-      no2:    data.hourly.nitrogen_dioxide[idx],
-      so2:    data.hourly.sulphur_dioxide[idx],
-      o3:     data.hourly.ozone[idx],
-      time:   data.hourly.time[idx],
-      source: "openmeteo",
+      name:   first.name,
+      distKm: Math.round((first.distance ?? 0) / 1000),
     }
-  } catch (err) {
-    console.error("[Open-Meteo] fetch error:", err)
+  } catch {
     return null
   }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
 export async function fetchAirQuality(lat, lng) {
-  if (isMetroManila(lat, lng)) {
-    const result = await fetchFromOpenAQ(lat, lng)
-    if (result) return result
-    console.warn("[AQ] OpenAQ had no result, falling back to Open-Meteo")
-  }
-  return fetchFromOpenMeteo(lat, lng)
+  return fetchFromOpenAQ(lat, lng)
 }

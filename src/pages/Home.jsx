@@ -5,7 +5,7 @@ import AQIGauge from "../components/AQIGauge"
 import PollutantModal from "../components/PollutantModal"
 import AqiChart from "../components/AqiChart"
 import AnimatedPage from "../components/AnimatedPage"
-import { fetchAirQuality } from "../services/airquality"
+import { fetchAirQuality, findNearestStation } from "../services/airquality"
 import { supabase } from "../services/supabaseclient"
 import { staggerContainer, cardVariants, buttonVariants, scrollReveal } from "../animations/variants"
 import { useUser } from "../context/UserContext"
@@ -80,6 +80,7 @@ export default function Home() {
   const [generalTip,     setGeneralTip]  = useState(null)
   const [lastUpdated,    setLastUpdated] = useState(null)
   const [loadProgress,   setLoadProgress] = useState(0)
+  const [nearestStation, setNearestStation] = useState(null)
 
   const loadData = useCallback(async (loc) => {
     setLoading(true)
@@ -92,7 +93,15 @@ export default function Home() {
     }, 150)
     const result = await fetchAirQuality(loc.lat, loc.lng)
     clearInterval(ticker)
-    if (!result) { setLoadProgress(0); setError("Could not load air quality data."); setLoading(false); return }
+    if (!result) {
+      setLoadProgress(0)
+      setLoading(false)
+      // Look for nearest station to show informative message
+      const nearest = await findNearestStation(loc.lat, loc.lng)
+      setNearestStation(nearest)
+      setError("no_sensor_data")
+      return
+    }
     setLoadProgress(100)
     setTimeout(() => setLoading(false), 300)
     setData(result); setLastUpdated(new Date())
@@ -198,6 +207,32 @@ export default function Home() {
   )
 
   if (loading && !data) return <HomeLoader progress={loadProgress} />
+
+  if (error === "no_sensor_data") return (
+    <AnimatedPage>
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 gap-6">
+        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 260, damping: 18 }}
+          style={{ fontSize: 56 }}>📡</motion.div>
+        <div className="text-center" style={{ maxWidth: 340 }}>
+          <h2 className="font-display font-bold text-2xl text-white mb-2">No certified sensor data</h2>
+          <p style={{ color: "#666", fontSize: 14, lineHeight: 1.6 }}>
+            No certified ground sensor is available for your area. AURA does not display estimated satellite model data.
+          </p>
+          {nearestStation && (
+            <p style={{ color: "#444", fontSize: 12, marginTop: 12, fontFamily: "DM Mono, monospace" }}>
+              Nearest station: <span style={{ color: "#aaa" }}>{nearestStation.name}</span>
+              {" "}({nearestStation.distKm} km away)
+            </p>
+          )}
+        </div>
+        <motion.button variants={buttonVariants} initial="rest" whileHover="hover" whileTap="tap"
+          onClick={() => navigate("/location")}
+          style={{ padding: "12px 28px", background: "#ff3c3c", color: "#fff", borderRadius: 10,
+                   fontSize: 13, fontWeight: 600, fontFamily: "DM Mono, monospace", letterSpacing: "0.08em" }}
+        >CHANGE LOCATION</motion.button>
+      </div>
+    </AnimatedPage>
+  )
 
   if (error && !data) return (
     <AnimatedPage>

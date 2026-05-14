@@ -43,41 +43,48 @@ function stationColor(datetimeLast) {
 }
 
 async function fetchPHStations() {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-  const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY
-  const proxy = `${supabaseUrl}/functions/v1/openaq-proxy`
-  const headers = { 'Authorization': `Bearer ${supabaseAnon}` }
+  const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openaq-proxy`
+  const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY
+  const headers    = { Authorization: `Bearer ${ANON_KEY}` }
+
+  // Fetch PH stations using multiple Metro Manila + key city coordinates
+  // since OpenAQ v3 caps radius at 25 km
   const centers = [
-    [14.5995, 120.9842],
-    [14.6760, 121.0437],
-    [10.3157, 123.8854],
-    [7.1907,  125.4553],
-    [16.4023, 120.5960],
-    [14.8527, 120.8170],
-    [14.0766, 121.3270],
+    [14.5995, 120.9842], // Manila
+    [14.6760, 121.0437], // QC
+    [10.3157, 123.8854], // Cebu
+    [7.1907,  125.4553], // Davao
+    [16.4023, 120.5960], // Baguio
+    [14.8527, 120.8170], // Pampanga
+    [14.0766, 121.3270], // Laguna
   ]
   try {
     const results = await Promise.all(
-      centers.map(([lat, lng]) => {
-        const path = encodeURIComponent(`/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=50`)
-        return fetch(`${proxy}?path=${path}`, { headers })
-          .then(async r => {
+      centers.map(([lat, lng]) =>
+        fetch(
+          `${PROXY_BASE}/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=50`,
+          { headers }
+        )
+          .then(async (r) => {
             const json = await r.json()
             if (!r.ok) { console.warn("[Stations] API error:", json); return [] }
             return json.results || []
           })
-          .catch(e => { console.warn("[Stations] fetch error:", e); return [] })
-      })
+          .catch((e) => { console.warn("[Stations] fetch error:", e); return [] })
+      )
     )
     const all = results.flat()
     console.log("[Stations] total fetched:", all.length)
     const seen = new Set()
-    return all.filter(s => {
+    return all.filter((s) => {
       if (!s.coordinates?.latitude || seen.has(s.id)) return false
       seen.add(s.id)
       return true
     })
-  } catch(e) { console.error("[Stations] outer error:", e); return [] }
+  } catch (e) {
+    console.error("[Stations] outer error:", e)
+    return []
+  }
 }
 
 const card = {
@@ -314,7 +321,7 @@ export default function Location() {
                   <span style={{ fontSize: 12, fontWeight: 600, color: status.accent, fontFamily: "DM Mono, monospace", letterSpacing: "0.08em" }}>{status.label.toUpperCase()}</span>
                   {preview.source && (
                     <p style={{ fontSize: 10, color: "#555", fontFamily: "DM Mono, monospace", marginTop: 4 }}>
-                      via {preview.source === "openaq" ? "OpenAQ" : "Open-Meteo"}
+                      via OpenAQ
                     </p>
                   )}
                 </div>
