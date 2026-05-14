@@ -1,14 +1,22 @@
-// Air Quality Service — IQAir (AirVisual) via Supabase Edge Function proxy
+// Air Quality Service — AQICN (WAQI) city-feed via Supabase Edge Function proxy
 //
-// Calls go through the iqair-proxy Edge Function so the API key stays
-// server-side and the api-airvisual.com hostname resolves from Supabase's
-// network (avoids ERR_NAME_NOT_RESOLVED from client browsers).
+// IQAir (api-airvisual.com) hostname is dead as of May 2026.
+// AQICN geo endpoint returns wrong countries for PH coords.
+// AQICN named city feed (/feed/<city>/) is confirmed working for Manila.
 //
-// Normalized return shape:
+// Strategy:
+//   1. Reverse-geocode lat/lng → city name via Nominatim (already used in Location.jsx)
+//   2. Call aqicn-proxy?path=/feed/<city>/ for that city name
+//   3. Fall back to "manila" if the city lookup returns no data
+//
+// Normalized return shape (unchanged — same as IQAir era):
 //   { aqi, pm25, pm10, no2, so2, o3, co, time, source, stationName, forecasts_daily }
 
-const SUPABASE_URL   = import.meta.env.VITE_SUPABASE_URL
-const PROXY_BASE     = `${SUPABASE_URL}/functions/v1/iqair-proxy`
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const ANON_KEY     = import.meta.env.VITE_SUPABASE_ANON_KEY
+const PROXY_BASE   = `${SUPABASE_URL}/functions/v1/aqicn-proxy`
+
+const AUTH = { "Authorization": `Bearer ${ANON_KEY}` }
 
 // ── EPA PM2.5 → AQI breakpoints (exported for chart use) ─────────────────
 const PM25_BP = [
@@ -29,52 +37,91 @@ export function pm25ToAqi(c) {
   return null
 }
 
-// ── Normalize IQAir response into app's common shape ──────────────────────
-function normalize(data) {
-  if (!data) return null
-  const pollution = data.current?.pollution
-  if (!pollution) return null
-  const aqi = pollution.aqius
-  if (aqi == null || isNaN(Number(aqi))) return null
+// ── Reverse-geocode lat/lng → city name ───────────────────────────────────
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+      { headers: { "Accept-Language": "en" } }
+    )
+    const json = await res.json()
+    // Prefer city > town > municipality > county
+    const a = json.address || {}
+    return (a.city || a.town || a.municipality || a.county || "manila")
+      .toLowerCase()
+      .replace(/\s+/g, "-")   // "quezon city" → "quezon-city"
+  } catch {
+    return "manila"
+  }
+}
 
-  // IQAir pollutant keys: p2=PM2.5, p1=PM10, o3=O3, n2=NO2, s2=SO2, co=CO
-  const g = (key) => pollution[key]?.conc ?? null
+// ── Call aqicn-proxy for a city slug ──────────────────────────────────────
+async function fetchCity(citySlug) {
+  const path = encodeURIComponent(`/feed/${citySlug}/`)
+  const res  = await fetch(`${PROXY_BASE}?path=${path}`, { headers: AUTH })
+  if (!res.ok) throw new Error(`aqicn-proxy ${res.status}`)
+  return res.json()
+}
+
+// ── Normalize AQICN response into app's common shape ─────────────────────
+function normalize(json) {
+  if (!json || json.status !== "ok") return null
+  const d   = json.data
+  const aqi = Number(d.aqi)
+  if (!d || isNaN(aqi)) return null
+
+  const g = (key) => d.iaqi?.[key]?.v ?? null
+
+  // Build forecasts_daily from AQICN forecast.daily.pm25 avg as day AQI
+  const raw_fc = d.forecast?.daily?.pm25 ?? d.forecast?.daily?.o3 ?? []
+  const forecasts_daily = raw_fc.map(f => ({
+    ts:    f.day,
+    aqius: f.avg,
+    min:   f.min,
+    max:   f.max,
+  }))
 
   return {
-    aqi:             Number(aqi),
-    pm25:            g("p2"),
-    pm10:            g("p1"),
+    aqi,
+    pm25:            g("pm25"),
+    pm10:            g("pm10"),
     o3:              g("o3"),
-    no2:             g("n2"),
-    so2:             g("s2"),
+    no2:             g("no2"),
+    so2:             g("so2"),
     co:              g("co"),
-    time:            pollution.ts ?? new Date().toISOString(),
-    source:          "iqair",
-    stationName:     [data.city, data.state, data.country].filter(Boolean).join(", "),
-    forecasts_daily: data.forecasts_daily ?? [],
+    time:            d.time?.iso ?? new Date().toISOString(),
+    source:          "aqicn",
+    stationName:     d.city?.name ?? "Philippines",
+    forecasts_daily,
   }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
 
-/** Geo-based lookup — routed through iqair-proxy Edge Function */
+/** Geo-based lookup: reverse-geocode → city feed, fallback to manila */
 export async function fetchAirQuality(lat, lng) {
   try {
-    const path = encodeURIComponent(`/nearest_city?lat=${lat}&lon=${lng}`)
-    const res = await fetch(`${PROXY_BASE}?path=${path}`, {
-      headers: { "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-    })
-    if (!res.ok) throw new Error(`iqair-proxy ${res.status}`)
-    const json = await res.json()
-    if (json.status !== "success") throw new Error(`IQAir: ${json.data}`)
-    return normalize(json.data)
+    const city = await reverseGeocode(lat, lng)
+    console.log(`[AQICN] trying city: ${city}`)
+
+    let json = await fetchCity(city)
+    let result = normalize(json)
+
+    // If city slug returned no data, fall back to plain "manila"
+    if (!result && city !== "manila") {
+      console.warn(`[AQICN] no data for "${city}", falling back to manila`)
+      json   = await fetchCity("manila")
+      result = normalize(json)
+    }
+
+    return result
   } catch (err) {
-    console.warn("[IQAir] fetchAirQuality error:", err)
+    console.warn("[AQICN] fetchAirQuality error:", err)
     return null
   }
 }
 
-/** No-op — IQAir free tier is geo-only */
+/** No-op — AQICN free tier is city-name based */
 export async function findNearestStation(_lat, _lng) {
   return null
 }
