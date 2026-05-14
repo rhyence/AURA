@@ -1,7 +1,7 @@
 import "leaflet/dist/leaflet.css"
 import L from "leaflet"
 import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMap, useMapEvents } from "react-leaflet"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 import { fetchAirQuality, fetchAirQualityByStationId } from "../services/airquality"
@@ -19,8 +19,11 @@ function FlyTo({ target }) {
   useEffect(() => { if (target) map.flyTo(target, 13, { duration: 1.2 }) }, [target, map])
   return null
 }
-function ClickHandler({ onSelect }) {
-  useMapEvents({ click(e) { onSelect(e.latlng) } })
+function ClickHandler({ onSelect, suppressRef }) {
+  useMapEvents({ click(e) {
+    if (suppressRef.current) { suppressRef.current = false; return }
+    onSelect(e.latlng)
+  }})
   return null
 }
 
@@ -118,6 +121,7 @@ export default function Location() {
   const [showStations,    setShowStations]    = useState(true)
   const [loadingStations, setLoadingStations] = useState(false)
   const [selectedStation, setSelectedStation] = useState(null) // station obj when user clicked a dot
+  const suppressMapClick = useRef(false) // prevents map ClickHandler firing after station dot click
 
   useEffect(() => {
     setLoadingStations(true)
@@ -149,6 +153,7 @@ export default function Location() {
   const handleMapClick = (latlng) => resolvePin(latlng)
 
   const handleStationClick = async (station) => {
+    suppressMapClick.current = true  // block the map click that fires right after this
     const latlng = { lat: station.coordinates.latitude, lng: station.coordinates.longitude }
     setPin(latlng)
     setSaved(false)
@@ -288,7 +293,7 @@ export default function Location() {
               <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" subdomains="abc" maxZoom={19} />
             )}
             {flyTo && <FlyTo target={flyTo} />}
-            <ClickHandler onSelect={handleMapClick} />
+            <ClickHandler onSelect={handleMapClick} suppressRef={suppressMapClick} />
             {pin && <Marker position={pin} />}
 
             {showStations && stations.map(s => {
