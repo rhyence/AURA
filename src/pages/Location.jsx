@@ -117,6 +117,7 @@ export default function Location() {
   const [stations,        setStations]        = useState([])
   const [showStations,    setShowStations]    = useState(true)
   const [loadingStations, setLoadingStations] = useState(false)
+  const [selectedStation, setSelectedStation] = useState(null) // station obj when user clicked a dot
 
   useEffect(() => {
     setLoadingStations(true)
@@ -124,7 +125,7 @@ export default function Location() {
   }, [])
 
   const resolvePin = async (latlng) => {
-    setPin(latlng); setSaved(false); setPreview(null); setPlaceName("")
+    setPin(latlng); setSaved(false); setPreview(null); setPlaceName(""); setSelectedStation(null)
     try {
       const res  = await fetch(
         `https://nominatim.openstreetmap.org/reverse?lat=${latlng.lat}&lon=${latlng.lng}&format=json`,
@@ -154,6 +155,7 @@ export default function Location() {
     setPreview(null)
     setPlaceName(station.name)
     setFlyTo(latlng)
+    setSelectedStation(station)
     setLoadingAQI(true)
     const aqiData = await fetchAirQualityByStationId(station.id, station.name, station.sensors)
     setLoadingAQI(false)
@@ -196,7 +198,16 @@ export default function Location() {
 
   const handleConfirm = async () => {
     if (!pin) return
-    const loc = { lat: pin.lat, lng: pin.lng, name: placeName }
+    const loc = {
+      lat:  pin.lat,
+      lng:  pin.lng,
+      name: placeName,
+      ...(selectedStation && {
+        stationId:   selectedStation.id,
+        stationName: selectedStation.name,
+        sensors:     selectedStation.sensors,
+      }),
+    }
     localStorage.setItem("airaware_location", JSON.stringify(loc))
     const { data: { user } } = await supabase.auth.getUser()
     if (user) await supabase.from("profiles").upsert({ id: user.id, last_location: loc }, { onConflict: "id" })
