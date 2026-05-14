@@ -1,13 +1,13 @@
-// Air Quality Service — IQAir (AirVisual) via Supabase Edge Function proxy
+// Air Quality Service — IQAir (AirVisual) direct from frontend
 //
-// Free Community tier endpoints used:
-//   /nearest_city?lat=&lon=  → geo lookup, returns city-level AQI + pollutants + 7-day forecast
+// IQAir community keys are low-risk to expose: 10k calls/month hard cap,
+// no billing attached. No proxy needed.
 //
 // Normalized return shape:
 //   { aqi, pm25, pm10, no2, so2, o3, co, time, source, stationName, forecasts_daily }
 
-const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/iqair-proxy`
-const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY
+const IQAIR_BASE = "https://api-airvisual.com/v2"
+const IQAIR_KEY  = import.meta.env.VITE_IQAIR_API_KEY
 
 // ── EPA PM2.5 → AQI breakpoints (exported for chart use) ─────────────────
 const PM25_BP = [
@@ -28,29 +28,11 @@ export function pm25ToAqi(c) {
   return null
 }
 
-// ── Proxy fetch helper ────────────────────────────────────────────────────
-async function iqairFetch(path) {
-  const res = await fetch(`${PROXY_BASE}?path=${encodeURIComponent(path)}`, {
-    headers: { Authorization: `Bearer ${ANON_KEY}` },
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`iqair-proxy ${res.status}: ${text}`)
-  }
-  const json = await res.json()
-  if (json.status !== "success") {
-    throw new Error(`IQAir error: ${json.data ?? json.status}`)
-  }
-  return json.data
-}
-
 // ── Normalize IQAir response into app's common shape ──────────────────────
 function normalize(data) {
   if (!data) return null
-
   const pollution = data.current?.pollution
   if (!pollution) return null
-
   const aqi = pollution.aqius
   if (aqi == null || isNaN(Number(aqi))) return null
 
@@ -58,16 +40,16 @@ function normalize(data) {
   const g = (key) => pollution[key]?.conc ?? null
 
   return {
-    aqi:            Number(aqi),
-    pm25:           g("p2"),
-    pm10:           g("p1"),
-    o3:             g("o3"),
-    no2:            g("n2"),
-    so2:            g("s2"),
-    co:             g("co"),
-    time:           pollution.ts ?? new Date().toISOString(),
-    source:         "iqair",
-    stationName:    [data.city, data.state, data.country].filter(Boolean).join(", "),
+    aqi:             Number(aqi),
+    pm25:            g("p2"),
+    pm10:            g("p1"),
+    o3:              g("o3"),
+    no2:             g("n2"),
+    so2:             g("s2"),
+    co:              g("co"),
+    time:            pollution.ts ?? new Date().toISOString(),
+    source:          "iqair",
+    stationName:     [data.city, data.state, data.country].filter(Boolean).join(", "),
     forecasts_daily: data.forecasts_daily ?? [],
   }
 }
@@ -77,15 +59,20 @@ function normalize(data) {
 /** Geo-based lookup — used for map taps and home screen */
 export async function fetchAirQuality(lat, lng) {
   try {
-    const data = await iqairFetch(`/nearest_city?lat=${lat}&lon=${lng}`)
-    return normalize(data)
+    const res = await fetch(
+      `${IQAIR_BASE}/nearest_city?lat=${lat}&lon=${lng}&key=${IQAIR_KEY}`
+    )
+    if (!res.ok) throw new Error(`IQAir ${res.status}`)
+    const json = await res.json()
+    if (json.status !== "success") throw new Error(`IQAir: ${json.data}`)
+    return normalize(json.data)
   } catch (err) {
     console.warn("[IQAir] fetchAirQuality error:", err)
     return null
   }
 }
 
-/** No-op — IQAir free tier is geo-only, no station ID lookup */
+/** No-op — IQAir free tier is geo-only */
 export async function findNearestStation(_lat, _lng) {
   return null
 }
