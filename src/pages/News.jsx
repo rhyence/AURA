@@ -13,12 +13,12 @@ const card = {
 }
 
 const QUERIES = {
-  all:      (loc) => `air quality pollution ${loc} Philippines`,
-  asthma:   (loc) => `asthma respiratory air pollution ${loc} Philippines`,
-  safety:   (loc) => `air quality health warning smog ${loc} Philippines`,
-  vog:      ()    => `volcanic smog vog Taal Mayon Philippines eruption`,
-  wildfire: (loc) => `wildfire bushfire smoke haze ${loc} Southeast Asia`,
-  disaster: ()    => `natural disaster Philippines flood earthquake volcano 2026`,
+  all:      (r) => `air quality ${r}`,
+  asthma:   (r) => `asthma air pollution ${r}`,
+  safety:   (r) => `air pollution health ${r}`,
+  vog:      (r) => `Taal volcano ${r}`,
+  wildfire: (r) => `wildfire smoke ${r}`,
+  disaster: (r) => `natural disaster ${r}`,
 }
 
 const TAG_COLORS = {
@@ -148,14 +148,45 @@ export default function News() {
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState(null)
   const [locName,  setLocName]  = useState("Philippines")
+  const [region,   setRegion]   = useState("Philippines")
   const cacheRef = useRef({})
+
+  // Load cache from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("aura_news_cache")
+      if (saved) {
+        const { data, ts } = JSON.parse(saved)
+        // Cache valid for 6 hours
+        if (Date.now() - ts < 6 * 60 * 60 * 1000) {
+          cacheRef.current = data
+        } else {
+          localStorage.removeItem("aura_news_cache")
+        }
+      }
+    } catch {}
+  }, [])
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem("airaware_location")
       if (saved) {
-        const { name } = JSON.parse(saved)
+        const { name, lat, lng } = JSON.parse(saved)
         if (name) setLocName(extractCity(name))
+        // Reverse-geocode to get the region/state (e.g. "Metro Manila")
+        if (lat && lng) {
+          fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`, {
+            headers: { "Accept-Language": "en" }
+          })
+            .then(r => r.json())
+            .then(d => {
+              const a = d.address || {}
+              // state = region in PH (e.g. "Metro Manila", "Calabarzon")
+              const r = a.state || a.region || a.city || a.county || "Philippines"
+              setRegion(r)
+            })
+            .catch(() => {})
+        }
       }
     } catch {}
   }, [])
@@ -163,7 +194,7 @@ export default function News() {
   useEffect(() => {
     if (!isPremium) return
 
-    const cacheKey = `${filter}:${locName}`
+    const cacheKey = `${filter}:${region}`
     if (cacheRef.current[cacheKey]) {
       setArticles(cacheRef.current[cacheKey])
       setLoading(false)
@@ -173,9 +204,12 @@ export default function News() {
     setLoading(true)
     setError(null)
 
-    fetchNews(QUERIES[filter](locName))
+    fetchNews(QUERIES[filter](region))
       .then(items => {
         cacheRef.current[cacheKey] = items
+        try {
+          localStorage.setItem("aura_news_cache", JSON.stringify({ data: cacheRef.current, ts: Date.now() }))
+        } catch {}
         setArticles(items)
         setLoading(false)
       })
@@ -199,7 +233,7 @@ export default function News() {
               Air News<span style={{ color: "#ff3c3c" }}>.</span>
             </h1>
             <p style={{ color: "#555", fontSize: 13, marginTop: 4, fontFamily: "DM Mono, monospace" }}>
-              {locName} · latest air quality news
+              {region} · latest air quality news
             </p>
           </div>
 
