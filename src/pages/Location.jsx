@@ -1,10 +1,10 @@
 import "leaflet/dist/leaflet.css"
 import L from "leaflet"
-import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet"
-import { useState, useEffect, useCallback } from "react"
+import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMap, useMapEvents } from "react-leaflet"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
-import { fetchAirQuality } from "../services/airquality"
+import { fetchAirQuality, fetchAirQualityByStationId } from "../services/airquality"
 import { supabase } from "../services/supabaseclient"
 
 delete L.Icon.Default.prototype._getIconUrl
@@ -19,8 +19,11 @@ function FlyTo({ target }) {
   useEffect(() => { if (target) map.flyTo(target, 13, { duration: 1.2 }) }, [target, map])
   return null
 }
-function ClickHandler({ onSelect }) {
-  useMapEvents({ click(e) { onSelect(e.latlng) } })
+function ClickHandler({ onSelect, suppressRef }) {
+  useMapEvents({ click(e) {
+    if (suppressRef.current) { suppressRef.current = false; return }
+    onSelect(e.latlng)
+  }})
   return null
 }
 
@@ -32,6 +35,59 @@ function getStatus(aqi) {
   if (n <= 150) return { label: "Unhealthy for Sensitive", accent: "#ff8c42" }
   if (n <= 200) return { label: "Unhealthy",               accent: "#ff3c3c" }
   return               { label: "Hazardous",               accent: "#c026d3" }
+}
+
+function stationColor(datetimeLast) {
+  if (!datetimeLast) return "#555"
+  const ageHours = (Date.now() - new Date(datetimeLast.utc).getTime()) / 3600000
+  if (ageHours < 3)  return "#4ecdc4"
+  if (ageHours < 24) return "#ffe66d"
+  return "#ff8c42"
+}
+
+async function fetchPHStations() {
+  const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openaq-proxy`
+  const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY
+  const headers    = { Authorization: `Bearer ${ANON_KEY}` }
+
+  // Fetch PH stations using multiple Metro Manila + key city coordinates
+  // since OpenAQ v3 caps radius at 25 km
+  const centers = [
+    [14.5995, 120.9842], // Manila
+    [14.6760, 121.0437], // QC
+    [10.3157, 123.8854], // Cebu
+    [7.1907,  125.4553], // Davao
+    [16.4023, 120.5960], // Baguio
+    [14.8527, 120.8170], // Pampanga
+    [14.0766, 121.3270], // Laguna
+  ]
+  try {
+    const results = await Promise.all(
+      centers.map(([lat, lng]) =>
+        fetch(
+          `${PROXY_BASE}?path=${encodeURIComponent(`/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=50`)}`,
+          { headers }
+        )
+          .then(async (r) => {
+            const json = await r.json()
+            if (!r.ok) { console.warn("[Stations] API error:", json); return [] }
+            return json.results || []
+          })
+          .catch((e) => { console.warn("[Stations] fetch error:", e); return [] })
+      )
+    )
+    const all = results.flat()
+    console.log("[Stations] total fetched:", all.length)
+    const seen = new Set()
+    return all.filter((s) => {
+      if (!s.coordinates?.latitude || seen.has(s.id)) return false
+      seen.add(s.id)
+      return true
+    })
+  } catch (e) {
+    console.error("[Stations] outer error:", e)
+    return []
+  }
 }
 
 const card = {
@@ -50,20 +106,30 @@ const inp = {
 
 export default function Location() {
   const navigate = useNavigate()
-  const [query,      setQuery]      = useState("")
-  const [flyTo,      setFlyTo]      = useState(null)
-  const [pin,        setPin]        = useState(null)
-  const [placeName,  setPlaceName]  = useState("")
-  const [searching,  setSearching]  = useState(false)
-  const [mapStyle,   setMapStyle]   = useState("dark")
-  const [locating,   setLocating]   = useState(false)
-  const [error,      setError]      = useState(null)
-  const [saved,      setSaved]      = useState(false)
-  const [preview,    setPreview]    = useState(null)
-  const [loadingAQI, setLoadingAQI] = useState(false)
+  const [query,           setQuery]           = useState("")
+  const [flyTo,           setFlyTo]           = useState(null)
+  const [pin,             setPin]             = useState(null)
+  const [placeName,       setPlaceName]       = useState("")
+  const [searching,       setSearching]       = useState(false)
+  const [mapStyle,        setMapStyle]        = useState("dark")
+  const [locating,        setLocating]        = useState(false)
+  const [error,           setError]           = useState(null)
+  const [saved,           setSaved]           = useState(false)
+  const [preview,         setPreview]         = useState(null)
+  const [loadingAQI,      setLoadingAQI]      = useState(false)
+  const [stations,        setStations]        = useState([])
+  const [showStations,    setShowStations]    = useState(true)
+  const [loadingStations, setLoadingStations] = useState(false)
+  const [selectedStation, setSelectedStation] = useState(null) // station obj when user clicked a dot
+  const suppressMapClick = useRef(false) // prevents map ClickHandler firing after station dot click
 
-  const resolvePin = useCallback(async (latlng) => {
-    setPin(latlng); setSaved(false); setPreview(null); setPlaceName("")
+  useEffect(() => {
+    setLoadingStations(true)
+    fetchPHStations().then(s => { setStations(s); setLoadingStations(false) })
+  }, [])
+
+  const resolvePin = async (latlng) => {
+    setPin(latlng); setSaved(false); setPreview(null); setPlaceName(""); setSelectedStation(null)
     try {
       const res  = await fetch(
         `https://nominatim.openstreetmap.org/reverse?lat=${latlng.lat}&lon=${latlng.lng}&format=json`,
@@ -82,9 +148,24 @@ export default function Location() {
     const aqiData = await fetchAirQuality(latlng.lat, latlng.lng)
     setLoadingAQI(false)
     if (aqiData) setPreview(aqiData)
-  }, [])
+  }
 
-  const handleMapClick    = (latlng) => resolvePin(latlng)
+  const handleMapClick = (latlng) => resolvePin(latlng)
+
+  const handleStationClick = async (station) => {
+    suppressMapClick.current = true  // block the map click that fires right after this
+    const latlng = { lat: station.coordinates.latitude, lng: station.coordinates.longitude }
+    setPin(latlng)
+    setSaved(false)
+    setPreview(null)
+    setPlaceName(station.name)
+    setFlyTo(latlng)
+    setSelectedStation(station)
+    setLoadingAQI(true)
+    const aqiData = await fetchAirQualityByStationId(station.id, station.name, station.sensors)
+    setLoadingAQI(false)
+    if (aqiData) setPreview(aqiData)
+  }
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -122,7 +203,16 @@ export default function Location() {
 
   const handleConfirm = async () => {
     if (!pin) return
-    const loc = { lat: pin.lat, lng: pin.lng, name: placeName }
+    const loc = {
+      lat:  pin.lat,
+      lng:  pin.lng,
+      name: placeName,
+      ...(selectedStation && {
+        stationId:   selectedStation.id,
+        stationName: selectedStation.name,
+        sensors:     selectedStation.sensors,
+      }),
+    }
     localStorage.setItem("airaware_location", JSON.stringify(loc))
     const { data: { user } } = await supabase.auth.getUser()
     if (user) await supabase.from("profiles").upsert({ id: user.id, last_location: loc }, { onConflict: "id" })
@@ -165,8 +255,26 @@ export default function Location() {
 
         {error && <p style={{ color: "#ff3c3c", fontSize: 12, fontFamily: "DM Mono, monospace", marginBottom: 12 }}>{error}</p>}
 
-        {/* Map style toggle */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        {/* Map toolbar */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+          <button onClick={() => setShowStations(v => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600, fontFamily: "DM Mono, monospace", cursor: "pointer", transition: "all 0.2s", background: showStations ? "rgba(78,205,196,0.12)" : "rgba(255,255,255,0.04)", border: `1px solid ${showStations ? "rgba(78,205,196,0.35)" : "rgba(255,255,255,0.08)"}`, color: showStations ? "#4ecdc4" : "#555" }}
+          >
+            <span style={{ fontSize: 8 }}>●</span>
+            {loadingStations ? "LOADING…" : showStations ? `${stations.length} STATIONS` : "SHOW STATIONS"}
+          </button>
+
+          {showStations && (
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              {[["#4ecdc4", "< 3h"], ["#ffe66d", "Today"], ["#ff8c42", "Older"]].map(([color, label]) => (
+                <span key={label} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontFamily: "DM Mono, monospace", color: "#555" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, display: "inline-block" }} />
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 3, gap: 3 }}>
             {[["dark", "🌑 Dark"], ["color", "🗺️ Color"]].map(([val, label]) => (
               <button key={val} onClick={() => setMapStyle(val)}
@@ -185,13 +293,36 @@ export default function Location() {
               <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" subdomains="abc" maxZoom={19} />
             )}
             {flyTo && <FlyTo target={flyTo} />}
-            <ClickHandler onSelect={handleMapClick} />
+            <ClickHandler onSelect={handleMapClick} suppressRef={suppressMapClick} />
             {pin && <Marker position={pin} />}
+
+            {showStations && stations.map(s => {
+              const color = stationColor(s.datetimeLast)
+              const params = (s.sensors ?? []).map(x => x.parameter?.name).filter(Boolean)
+              const lastSeen = s.datetimeLast
+                ? new Date(s.datetimeLast.utc).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                : "Unknown"
+              return (
+                <CircleMarker key={s.id} center={[s.coordinates.latitude, s.coordinates.longitude]} radius={6}
+                  pathOptions={{ color, fillColor: color, fillOpacity: 0.85, weight: 1.5 }}
+                  eventHandlers={{ click: (e) => { e.originalEvent.stopPropagation(); handleStationClick(s) } }}
+                >
+                  <Tooltip direction="top" offset={[0, -6]} opacity={1}>
+                    <div style={{ fontFamily: "DM Mono, monospace", fontSize: 11, lineHeight: 1.7, minWidth: 140 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 2 }}>{s.name}</div>
+                      {params.length > 0 && <div style={{ color: "#999" }}>{params.join(", ")}</div>}
+                      <div style={{ color: "#777", fontSize: 10, marginTop: 2 }}>Last: {lastSeen}</div>
+                      <div style={{ color, fontSize: 10 }}>{s.isMonitor ? "✓ Reference monitor" : "◦ Low-cost sensor"}</div>
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+              )
+            })}
           </MapContainer>
         </div>
 
         <p style={{ fontSize: 11, color: "#333", fontFamily: "DM Mono, monospace", textAlign: "center", marginBottom: 16 }}>
-          tap the map to pin a location · or search above
+          tap the map to pin a location · tap a station dot to select it
         </p>
 
         {pin && (
@@ -218,9 +349,11 @@ export default function Location() {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: status.accent, fontFamily: "DM Mono, monospace", letterSpacing: "0.08em" }}>{status.label.toUpperCase()}</span>
-                  <p style={{ fontSize: 10, color: "#555", fontFamily: "DM Mono, monospace", marginTop: 4 }}>
-                    {preview.stationName}
-                  </p>
+                  {preview.source && (
+                    <p style={{ fontSize: 10, color: "#555", fontFamily: "DM Mono, monospace", marginTop: 4 }}>
+                      via OpenAQ
+                    </p>
+                  )}
                 </div>
               </div>
             )}

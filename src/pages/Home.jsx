@@ -5,7 +5,7 @@ import AQIGauge from "../components/AQIGauge"
 import PollutantModal from "../components/PollutantModal"
 import AqiChart from "../components/AqiChart"
 import AnimatedPage from "../components/AnimatedPage"
-import { fetchAirQuality, findNearestStation } from "../services/airquality"
+import { fetchAirQuality, findNearestStation, fetchAirQualityByStationId } from "../services/airquality"
 import { supabase } from "../services/supabaseclient"
 import { staggerContainer, cardVariants, buttonVariants, scrollReveal } from "../animations/variants"
 import { useUser } from "../context/UserContext"
@@ -91,7 +91,9 @@ export default function Home() {
       fake = Math.min(85, fake + Math.random() * 15)
       setLoadProgress(Math.floor(fake))
     }, 150)
-    const result = await fetchAirQuality(loc.lat, loc.lng)
+    const result = loc.stationId
+      ? await fetchAirQualityByStationId(loc.stationId, loc.stationName, loc.sensors)
+      : await fetchAirQuality(loc.lat, loc.lng)
     clearInterval(ticker)
     if (!result) {
       setLoadProgress(0)
@@ -356,7 +358,7 @@ export default function Home() {
 
           {/* AQI Chart — premium gated */}
           {isPremium
-            ? <AqiChart forecasts={data?.forecasts_daily} />
+            ? <AqiChart lat={location?.lat} lng={location?.lng} />
             : (
               <motion.div variants={scrollReveal} initial="initial" whileInView="whileInView" viewport={{ once: true }}
                 style={{ ...card, padding: 24, display: "flex", flexDirection: "column", alignItems: "center",

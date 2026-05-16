@@ -1,21 +1,16 @@
-// Air Quality Service — AQICN (WAQI) city-feed via Supabase Edge Function proxy
+// Air Quality Service — OpenAQ only, via Supabase Edge Function proxy
+//
+// Strategy:
+//   All locations → OpenAQ v3 via openaq-proxy (no direct API calls, no API key in frontend)
+//   No station found within 25 km → return null (no fabricated satellite data)
+//
+// fetchAirQuality() returns a normalized object or null.
+//   { aqi, pm25, pm10, no2, so2, o3, co, time, source, stationName, stationDist }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const ANON_KEY     = import.meta.env.VITE_SUPABASE_ANON_KEY
-const PROXY_BASE   = `${SUPABASE_URL}/functions/v1/aqicn-proxy`
-const AUTH         = { "Authorization": `Bearer ${ANON_KEY}` }
+const PROXY_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openaq-proxy`
+const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-const NCR_TO_SLUG = {
-  "manila": "manila", "makati": "manila", "quezon-city": "manila",
-  "quezon city": "manila", "pasig": "manila", "taguig": "manila",
-  "mandaluyong": "manila", "pasay": "manila", "paranaque": "manila",
-  "parañaque": "manila", "las-pinas": "manila", "las piñas": "manila",
-  "las pinas": "manila", "muntinlupa": "manila", "marikina": "manila",
-  "caloocan": "manila", "malabon": "manila", "navotas": "manila",
-  "valenzuela": "manila", "san juan": "manila", "pateros": "manila",
-  "metro manila": "manila", "ncr": "manila",
-}
-
+// ── EPA PM2.5 → AQI breakpoints ──────────────────────────────────────────
 const PM25_BP = [
   [0.0,   9.0,   0,   50],
   [9.1,   35.4,  51,  100],
@@ -25,7 +20,7 @@ const PM25_BP = [
   [225.5, 325.4, 301, 500],
 ]
 
-export function pm25ToAqi(c) {
+function pm25ToAqi(c) {
   if (c == null) return null
   for (const [cLo, cHi, aLo, aHi] of PM25_BP) {
     if (c >= cLo && c <= cHi)
@@ -34,86 +29,142 @@ export function pm25ToAqi(c) {
   return null
 }
 
-async function reverseGeocode(lat, lng) {
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-      { headers: { "Accept-Language": "en" } }
-    )
-    const json = await res.json()
-    const a = json.address || {}
-    return (a.city || a.town || a.municipality || a.county || "manila").toLowerCase()
-  } catch {
-    return "manila"
+// ── Proxy fetch helper ────────────────────────────────────────────────────
+// The openaq-proxy Edge Function reads the OpenAQ path from ?path=
+async function proxyFetch(path) {
+  const res = await fetch(`${PROXY_BASE}?path=${encodeURIComponent(path)}`, {
+    headers: { Authorization: `Bearer ${ANON_KEY}` },
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Proxy ${res.status}: ${text}`)
   }
-}
-
-function resolveSlug(city) {
-  const lower = city.toLowerCase()
-  return NCR_TO_SLUG[lower] ?? lower.replace(/\s+/g, "-")
-}
-
-async function fetchCity(slug) {
-  const path = encodeURIComponent(`/feed/${slug}/`)
-  const res  = await fetch(`${PROXY_BASE}?path=${path}`, { headers: AUTH })
-  if (!res.ok) throw new Error(`aqicn-proxy ${res.status}`)
   return res.json()
 }
 
-function normalize(json) {
-  console.log("[AQICN] raw response:", JSON.stringify(json).slice(0, 300))
-  if (!json || json.status !== "ok") {
-    console.warn("[AQICN] normalize bail: status=", json?.status, "data=", json?.data)
-    return null
-  }
-  const d   = json.data
-  const aqi = Number(d?.aqi)
-  console.log("[AQICN] d.aqi=", d?.aqi, "→ Number=", aqi, "isNaN=", isNaN(aqi))
-  if (!d || isNaN(aqi)) return null
-
-  const g = (key) => d.iaqi?.[key]?.v ?? null
-
-  const raw_fc = d.forecast?.daily?.pm25 ?? d.forecast?.daily?.o3 ?? []
-  const forecasts_daily = raw_fc.map(f => ({
-    ts: f.day, aqius: f.avg, min: f.min, max: f.max,
-  }))
-
-  return {
-    aqi,
-    pm25:            g("pm25"),
-    pm10:            g("pm10"),
-    o3:              g("o3"),
-    no2:             g("no2"),
-    so2:             g("so2"),
-    co:              g("co"),
-    time:            d.time?.iso ?? new Date().toISOString(),
-    source:          "aqicn",
-    stationName:     d.city?.name ?? "Manila, Philippines",
-    forecasts_daily,
-  }
-}
-
-export async function fetchAirQuality(lat, lng) {
+// ── OpenAQ fetch via proxy ────────────────────────────────────────────────
+async function fetchFromOpenAQ(lat, lng) {
   try {
-    const city = await reverseGeocode(lat, lng)
-    const slug = resolveSlug(city)
-    console.log(`[AQICN] city="${city}" → slug="${slug}"`)
+    // 1. Nearest locations within 25 km, fresh within 24 h
+    const locData = await proxyFetch(
+      `/v3/locations?coordinates=${lat},${lng}&radius=25000&limit=10`
+    )
+    const locations = (locData.results || []).filter(
+      (l) =>
+        l.datetimeLast &&
+        Date.now() - new Date(l.datetimeLast.utc).getTime() < 24 * 3600 * 1000
+    )
+    if (!locations.length) return null
 
-    let result = normalize(await fetchCity(slug))
+    // 2. Pick closest location that has a pm25 sensor
+    const loc = locations.find((l) =>
+      l.sensors?.some((s) => s.parameter?.name === "pm25")
+    )
+    if (!loc) return null
 
-    if (!result && slug !== "manila") {
-      console.log(`[AQICN] no data for "${slug}", falling back to manila`)
-      result = normalize(await fetchCity("manila"))
+    // 3. Build sensorId → parameter name map from loc.sensors
+    //    /v3/locations/{id}/latest returns sensorsId (not parameter) on each reading;
+    //    we resolve parameter names via this map.
+    const sensorMap = {}
+    for (const s of loc.sensors || []) {
+      if (s.id != null && s.parameter?.name) {
+        sensorMap[s.id] = s.parameter.name
+      }
     }
 
-    console.log("[AQICN] final result:", result)
-    return result
+    // 4. Fetch latest readings
+    const measData = await proxyFetch(`/v3/locations/${loc.id}/latest`)
+    const readings = measData.results || []
+
+    // 5. Resolve values by parameter name via sensorMap
+    const get = (name) => {
+      const r = readings.find((r) => sensorMap[r.sensorsId] === name)
+      return r?.value ?? null
+    }
+
+    const pm25 = get("pm25")
+    const aqi  = pm25ToAqi(pm25)
+    if (aqi === null) return null
+
+    return {
+      aqi,
+      pm25,
+      pm10:        get("pm10"),
+      co:          get("co"),
+      no2:         get("no2"),
+      so2:         get("so2"),
+      o3:          get("o3"),
+      time:        readings[0]?.datetime?.utc || new Date().toISOString(),
+      source:      "openaq",
+      stationName: loc.name,
+      stationDist: Math.round(loc.distance ?? 0),
+    }
   } catch (err) {
-    console.warn("[AQICN] fetchAirQuality error:", err)
+    console.warn("[OpenAQ] fetch error:", err)
     return null
   }
 }
 
-export async function findNearestStation(_lat, _lng) {
-  return null
+// ── Nearest station within 100 km (for outside-coverage info message) ─────
+export async function findNearestStation(lat, lng) {
+  try {
+    const locData = await proxyFetch(
+      `/v3/locations?coordinates=${lat},${lng}&radius=100000&limit=3`
+    )
+    const first = (locData.results || [])[0]
+    if (!first) return null
+    return {
+      name:   first.name,
+      distKm: Math.round((first.distance ?? 0) / 1000),
+    }
+  } catch {
+    return null
+  }
+}
+
+// ── Public API ────────────────────────────────────────────────────────────
+export async function fetchAirQuality(lat, lng) {
+  return fetchFromOpenAQ(lat, lng)
+}
+
+// Fetch a specific known station by ID (used when user clicks a station dot)
+export async function fetchAirQualityByStationId(locationId, locationName, sensors) {
+  try {
+    // Build sensorMap from the station's sensors array (already available from fetchPHStations)
+    const sensorMap = {}
+    for (const s of sensors || []) {
+      if (s.id != null && s.parameter?.name) {
+        sensorMap[s.id] = s.parameter.name
+      }
+    }
+
+    const measData = await proxyFetch(`/v3/locations/${locationId}/latest`)
+    const readings = measData.results || []
+
+    const get = (name) => {
+      const r = readings.find((r) => sensorMap[r.sensorsId] === name)
+      return r?.value ?? null
+    }
+
+    const pm25 = get("pm25")
+    const aqi  = pm25ToAqi(pm25)
+    if (aqi === null) return null
+
+    return {
+      aqi,
+      pm25,
+      pm10:        get("pm10"),
+      co:          get("co"),
+      no2:         get("no2"),
+      so2:         get("so2"),
+      o3:          get("o3"),
+      time:        readings[0]?.datetime?.utc || new Date().toISOString(),
+      source:      "openaq",
+      stationName: locationName,
+      stationDist: 0,
+    }
+  } catch (err) {
+    console.warn("[OpenAQ] fetchByStationId error:", err)
+    return null
+  }
 }
