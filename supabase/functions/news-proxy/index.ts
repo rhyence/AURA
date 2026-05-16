@@ -31,7 +31,7 @@ serve(async (req: Request) => {
     })
   }
 
-  const upstream = `https://gnews.io/api/v4/search?q=${encodeURIComponent(q)}&lang=en&country=ph&max=6&apikey=${apiKey}`
+  const upstream = `https://gnews.io/api/v4/search?q=${encodeURIComponent(q)}&lang=en&max=6&apikey=${apiKey}`
 
   try {
     const res  = await fetch(upstream)

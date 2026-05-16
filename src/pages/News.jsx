@@ -13,12 +13,12 @@ const card = {
 }
 
 const QUERIES = {
-  all:      (loc) => `air quality Philippines ${loc}`,
-  asthma:   (loc) => `asthma air pollution Philippines ${loc}`,
-  safety:   (loc) => `air quality health advisory Philippines ${loc}`,
-  vog:      ()    => `volcanic smog vog Philippines Taal Mayon`,
-  wildfire: (loc) => `wildfire smoke air quality Philippines ${loc}`,
-  disaster: ()    => `volcano eruption disaster Philippines`,
+  all:      (loc) => `air quality pollution ${loc} Philippines`,
+  asthma:   (loc) => `asthma respiratory air pollution ${loc} Philippines`,
+  safety:   (loc) => `air quality health warning smog ${loc} Philippines`,
+  vog:      ()    => `volcanic smog vog Taal Mayon Philippines eruption`,
+  wildfire: (loc) => `wildfire bushfire smoke haze ${loc} Southeast Asia`,
+  disaster: ()    => `natural disaster Philippines flood earthquake volcano 2026`,
 }
 
 const TAG_COLORS = {
