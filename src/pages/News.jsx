@@ -32,7 +32,8 @@ const TAG_COLORS = {
 
 const FILTERS = ["all", "asthma", "safety", "vog", "wildfire", "disaster"]
 
-const GNEWS_KEY = import.meta.env.VITE_GNEWS_API_KEY
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const ANON_KEY     = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // Clean raw location names like "Kalayaan Ave - South Ave Intersection, Makati"
 // down to just the city: "Makati"
@@ -121,11 +122,13 @@ function SkeletonCard() {
 }
 
 async function fetchNews(query) {
-  const q = encodeURIComponent(query)
-  const url = `https://gnews.io/api/v4/search?q=${q}&lang=en&country=ph&max=6&apikey=${GNEWS_KEY}`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`GNews ${res.status}`)
+  const res = await fetch(
+    `${SUPABASE_URL}/functions/v1/news-proxy?q=${encodeURIComponent(query)}`,
+    { headers: { "Authorization": `Bearer ${ANON_KEY}` } }
+  )
+  if (!res.ok) throw new Error(`news-proxy ${res.status}`)
   const data = await res.json()
+  if (data.error) throw new Error(data.error)
   if (!data.articles) throw new Error(data.message || "No articles")
   return data.articles.map(a => ({
     title:       a.title,
