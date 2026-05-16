@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import AnimatedPage from "../components/AnimatedPage"
 import { useUser } from "../context/UserContext"
@@ -13,12 +13,12 @@ const card = {
 }
 
 const QUERIES = {
-  all:      (loc) => `latest air quality news Philippines ${loc} 2025 2026`,
-  asthma:   (loc) => `asthma children air pollution health Philippines ${loc}`,
-  safety:   (loc) => `air quality safety health advisory Philippines ${loc}`,
-  vog:      (loc) => `volcanic smog vog Taal Mayon eruption Philippines`,
+  all:      (loc) => `air quality Philippines ${loc}`,
+  asthma:   (loc) => `asthma air pollution Philippines ${loc}`,
+  safety:   (loc) => `air quality health advisory Philippines ${loc}`,
+  vog:      ()    => `volcanic smog vog Philippines Taal Mayon`,
   wildfire: (loc) => `wildfire smoke air quality Philippines ${loc}`,
-  disaster: (loc) => `volcano eruption earthquake disaster Philippines ${loc}`,
+  disaster: ()    => `volcano eruption disaster Philippines`,
 }
 
 const TAG_COLORS = {
@@ -31,6 +31,8 @@ const TAG_COLORS = {
 }
 
 const FILTERS = ["all", "asthma", "safety", "vog", "wildfire", "disaster"]
+
+const GNEWS_KEY = import.meta.env.VITE_GNEWS_API_KEY
 
 function timeAgo(dateStr) {
   if (!dateStr) return ""
@@ -68,7 +70,7 @@ function PremiumGate() {
           {[
             "News filtered by your saved AQI location",
             "Topics: general, asthma, safety, vog, wildfire",
-            "Sourced fresh via AI web search in real time",
+            "Fresh articles sourced in real time",
             "Updates every time you open the tab",
           ].map((f, i) => (
             <motion.div key={f} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
@@ -83,7 +85,7 @@ function PremiumGate() {
           onClick={() => navigate("/premium")}
           style={{ padding: "14px 36px", background: "linear-gradient(135deg, #ff3c3c, #ff8c42)",
                    color: "#fff", borderRadius: 10, fontSize: 12, fontWeight: 700,
-                   fontFamily: "DM Mono, monospace", letterSpacing: "0.1em" }}>
+                   fontFamily: "DM Mono, monospace", letterSpacing: "0.1em", cursor: "pointer" }}>
           ⭐ UPGRADE TO PREMIUM
         </motion.button>
       </div>
@@ -91,7 +93,6 @@ function PremiumGate() {
   )
 }
 
-// ── Skeleton loader ───────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
     <div style={{ ...card, padding: 20, overflow: "hidden", position: "relative" }}>
@@ -99,50 +100,29 @@ function SkeletonCard() {
       <div style={{ height: 16, width: "85%", background: "#1a1a1a", borderRadius: 4, marginBottom: 8 }} />
       <div style={{ height: 13, width: "100%", background: "#1a1a1a", borderRadius: 4, marginBottom: 6 }} />
       <div style={{ height: 13, width: "70%",  background: "#1a1a1a", borderRadius: 4 }} />
-      <motion.div animate={{ x: ["-100%", "200%"] }} transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
-        style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent)" }} />
+      <motion.div animate={{ x: ["-100%", "200%"] }}
+        transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+        style={{ position: "absolute", inset: 0,
+                 background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent)" }} />
     </div>
   )
 }
 
-// ── Claude-powered news fetch ─────────────────────────────────────────────────
-async function fetchNewsViaClaude(query) {
-  const today = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
-      system: `You are a news aggregator for an air quality app in the Philippines. Today is ${today}.
-Search for recent news articles matching the query and return a JSON array of up to 6 articles.
-Each article must be a real article found via web search — do NOT invent articles.
-Return ONLY a valid JSON array, no markdown, no explanation:
-[{"title":"...","description":"...","url":"...","source":"...","publishedAt":"ISO date string or null"}]
-Rules:
-- Only include articles from the last 30 days if possible, otherwise last 90 days
-- description should be 1-2 sentences summarizing the article
-- url must be the real article URL from search results
-- source is the publication name`,
-      messages: [{ role: "user", content: `Search for: ${query}` }],
-    }),
-  })
-
-  if (!response.ok) throw new Error(`API ${response.status}`)
-  const data = await response.json()
-
-  // Extract text from all content blocks (web search returns multiple blocks)
-  const text = data.content
-    .filter(b => b.type === "text")
-    .map(b => b.text)
-    .join("")
-
-  // Parse the JSON array from the response
-  const match = text.match(/\[[\s\S]*\]/)
-  if (!match) throw new Error("No JSON array in response")
-  return JSON.parse(match[0])
+async function fetchNews(query) {
+  const q = encodeURIComponent(query)
+  const url = `https://gnews.io/api/v4/search?q=${q}&lang=en&country=ph&max=6&apikey=${GNEWS_KEY}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`GNews ${res.status}`)
+  const data = await res.json()
+  if (!data.articles) throw new Error(data.message || "No articles")
+  return data.articles.map(a => ({
+    title:       a.title,
+    description: a.description || "",
+    url:         a.url,
+    image:       a.image || null,
+    source:      a.source?.name || "",
+    publishedAt: a.publishedAt,
+  }))
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -169,8 +149,6 @@ export default function News() {
     if (!isPremium) return
 
     const cacheKey = `${filter}:${locName}`
-
-    // Use cached result for this session if available
     if (cacheRef.current[cacheKey]) {
       setArticles(cacheRef.current[cacheKey])
       setLoading(false)
@@ -180,8 +158,7 @@ export default function News() {
     setLoading(true)
     setError(null)
 
-    const query = QUERIES[filter](locName)
-    fetchNewsViaClaude(query)
+    fetchNews(QUERIES[filter](locName))
       .then(items => {
         cacheRef.current[cacheKey] = items
         setArticles(items)
@@ -211,34 +188,30 @@ export default function News() {
             </p>
           </div>
 
-          {/* Filter tabs */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {FILTERS.map(f => (
               <motion.button key={f} whileTap={{ scale: 0.95 }} onClick={() => setFilter(f)}
                 style={{
-                  padding: "6px 14px", borderRadius: 99, fontSize: 11,
+                  padding: "6px 14px", borderRadius: 99, fontSize: 11, cursor: "pointer",
                   fontFamily: "DM Mono, monospace", letterSpacing: "0.08em",
                   textTransform: "uppercase", fontWeight: 600,
                   background: filter === f ? "#ff3c3c" : "rgba(28,28,28,0.8)",
                   color: filter === f ? "#fff" : "#555",
                   border: filter === f ? "1px solid #ff3c3c" : "1px solid rgba(255,255,255,0.06)",
-                  cursor: "pointer",
                 }}>{f}</motion.button>
             ))}
           </div>
 
-          {/* Loading skeletons */}
           {loading && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
               <p style={{ textAlign: "center", color: "#333", fontSize: 11,
                            fontFamily: "DM Mono, monospace", letterSpacing: "0.06em" }}>
-                SEARCHING LATEST NEWS…
+                LOADING NEWS…
               </p>
             </div>
           )}
 
-          {/* Error */}
           {error && !loading && (
             <div style={{ ...card, padding: 24, borderLeft: "2px solid #ff3c3c" }}>
               <p style={{ color: "#ff3c3c", fontSize: 13, fontFamily: "DM Mono, monospace" }}>⚠ {error}</p>
@@ -248,7 +221,6 @@ export default function News() {
             </div>
           )}
 
-          {/* Articles */}
           {!loading && !error && (
             <motion.div variants={staggerContainer} initial="initial" animate="animate"
               style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -274,6 +246,11 @@ export default function News() {
                         {a.source} · {timeAgo(a.publishedAt)}
                       </span>
                     </div>
+                    {a.image && (
+                      <img src={a.image} alt="" onError={e => e.target.style.display = "none"}
+                        style={{ width: "100%", height: 160, objectFit: "cover",
+                                 borderRadius: 10, marginBottom: 12 }} />
+                    )}
                     <p style={{ color: "#e8e8e8", fontWeight: 700, fontSize: 15,
                                  lineHeight: 1.4, marginBottom: 8 }}>{a.title}</p>
                     <p style={{ color: "#666", fontSize: 13, lineHeight: 1.6 }}>{a.description}</p>
