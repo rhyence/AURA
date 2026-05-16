@@ -34,6 +34,18 @@ const FILTERS = ["all", "asthma", "safety", "vog", "wildfire", "disaster"]
 
 const GNEWS_KEY = import.meta.env.VITE_GNEWS_API_KEY
 
+// Clean raw location names like "Kalayaan Ave - South Ave Intersection, Makati"
+// down to just the city: "Makati"
+function extractCity(rawName) {
+  if (!rawName) return "Philippines"
+  // Try to grab the last meaningful comma-segment (usually the city)
+  const parts = rawName.split(",").map(s => s.trim()).filter(Boolean)
+  // Find the shortest part that looks like a city (no "Avenue", "Street", etc.)
+  const roadWords = /avenue|ave|street|st|road|rd|boulevard|blvd|highway|hwy|intersection|corner|brgy|barangay/i
+  const city = parts.reverse().find(p => !roadWords.test(p) && p.length < 40)
+  return city || "Philippines"
+}
+
 function timeAgo(dateStr) {
   if (!dateStr) return ""
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -140,7 +152,7 @@ export default function News() {
       const saved = localStorage.getItem("airaware_location")
       if (saved) {
         const { name } = JSON.parse(saved)
-        if (name) setLocName(name)
+        if (name) setLocName(extractCity(name))
       }
     } catch {}
   }, [])
